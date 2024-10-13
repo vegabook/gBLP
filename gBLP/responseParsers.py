@@ -1,4 +1,4 @@
-# colorscheme greenvision
+# colorscheme greenvision dark
 from bloomberg_pb2 import (
     HistoricalDataResponse,
     HistoricalDataResponseItem,

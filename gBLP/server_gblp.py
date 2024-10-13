@@ -21,7 +21,7 @@ import random
 from collections import defaultdict
 import json
 import datetime as dt
-import sys # for hard exit
+import os
 import threading
 import signal
 from functools import partial
@@ -95,7 +95,7 @@ def trace_function(frame, event, arg):
     return trace_function  # Return itself to continue tracing
 
 # Set this trace function to be used for all new threads
-threading.settrace(trace_function)
+#threading.settrace(trace_function)
 # ----------------- util functions ----------------------
 
 def serialize_datetime(obj): 
@@ -537,40 +537,25 @@ class SessionsManager(SessionsManagerServicer):
             del self.sessions[sname]
 
 
+
 async def main():
     grpcServer = grpc.aio.server()
     keyServer = grpc.aio.server()
     session_task = asyncio.create_task(serveSessions(grpcServer))
     key_task = asyncio.create_task(keySession(keyServer))
-    await asyncio.sleep(10)
-    logger.info("Done is being set")
+    console.print("[bold red on white blink]Press <Enter> to stop the server")
+    console.print("[bold blue]--------------------------------")
+    await asyncio.to_thread(input, "")
     done.set()
-    logger.info("Waiting for done...")
-    try:
-        await done.wait()
-        logger.info("done waitined for. Stopping gRPC servers...")
-        await grpcServer.stop(grace=3)
-        logger.info("gRPC server stopped.") 
-        await keyServer.stop(grace=3)
-        logger.info("Key server stopped.")
-        logger.info("Gathering asyncio gRPC task wrappers...")
-        await asyncio.gather(session_task, key_task)
-        logger.info("All tasks stopped. Exiting.")
-    except Exception as e:
-        logger.info(f"Exception in main: {e}")
-    finally:
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        print("tasks", tasks)
-        for task in tasks:
-            logger.info(f"Force cancelling task {task}")
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-    # now print all running threads
-    for th in threading.enumerate():
-        console.print(f"[bold magenta]Thread {th.name} is still running[/bold magenta]")
-
-
-
+    logger.info("done waiting for. Stopping gRPC servers...")
+    await grpcServer.stop(grace=3)
+    logger.info("gRPC server stopped.") 
+    await keyServer.stop(grace=3)
+    logger.info("Key server stopped.")
+    logger.info("Gathering asyncio gRPC task wrappers...")
+    await asyncio.gather(session_task, key_task)
+    logger.info("All tasks stopped. Exiting.")
+    os._exit(0)
 
 
 if __name__ == "__main__":
@@ -584,4 +569,19 @@ if __name__ == "__main__":
             f.unlink()
         print("Deleted all certificates. Run --gencerts to make new ones.")
     else:
-        asyncio.run(main())
+        try:
+            asyncio.run(main())
+            logger.info("asyncio main() exited")
+        except KeyboardInterrupt:
+            print("Keyboard interrupt")
+            console.print("[bold magenta on white]You should press <Enter> to stop the server.")
+            console.print("[bold white on red] Killing all threads and processes.")
+            done.set()
+        except Exception as e:
+            logger.error(f"Caught exception {e}")
+        finally:
+            for th in threading.enumerate(): 
+                if not th.name == "MainThread":
+                    console.print(f"[bold magenta]Thread {th.name} is still running[/bold magenta]")
+            console.print("[bold green on white]os._exit(0)")
+            os._exit(1)
