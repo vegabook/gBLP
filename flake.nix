@@ -35,6 +35,7 @@
             python312Packages.colorama
             python312Packages.certifi
             python312Packages.cryptography
+            python312Packages.rich
             grpc-tools
             openssl_3_3
             certstrap

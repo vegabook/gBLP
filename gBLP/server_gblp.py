@@ -27,6 +27,7 @@ import signal
 from functools import partial
 import queue
 import blpapi
+import msvcrt
 
 import grpc
 from bloomberg_pb2 import Session
@@ -82,6 +83,9 @@ logging.basicConfig(level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 NUMBER_OF_REPLY = 10
+
+# ------------------- TODO ---------------------
+# when clients disconnect, grpc is keeping resources around
 
 # ----------------- thread creation tracking ----------------------
 def trace_function(frame, event, arg):
@@ -537,23 +541,48 @@ class SessionsManager(SessionsManagerServicer):
             del self.sessions[sname]
 
 
+async def quit_process():
+    while not done.is_set():
+        # Offload the blocking part to a different thread
+        key = await asyncio.to_thread(check_keypress)
+        
+        if key == b'q':
+            print("Q pressed")
+            done.set()
+            return
+        elif key == b't':
+            for th in threading.enumerate(): 
+                if not th.name == "MainThread":
+                    console.print(f"[bold magenta]Thread {th.name} is running[/bold magenta]")
+
+        await asyncio.sleep(0.1)
+
+
+def check_keypress():
+    # This function will be executed in a separate thread
+    if msvcrt.kbhit():
+        return msvcrt.getch()
+    return None
+
 
 async def main():
     grpcServer = grpc.aio.server()
     keyServer = grpc.aio.server()
     session_task = asyncio.create_task(serveSessions(grpcServer))
     key_task = asyncio.create_task(keySession(keyServer))
-    console.print("[bold red on white blink]Press <Enter> to stop the server")
+    console.print("[bold red on white blink]Press Q to stop the server")
     console.print("[bold blue]--------------------------------")
-    await asyncio.to_thread(input, "")
-    done.set()
+    quit_task = await asyncio.create_task(quit_process()) 
+    print("waiting")
+    done.wait()
+    print("waited")
     logger.info("done waiting for. Stopping gRPC servers...")
     await grpcServer.stop(grace=3)
     logger.info("gRPC server stopped.") 
     await keyServer.stop(grace=3)
     logger.info("Key server stopped.")
     logger.info("Gathering asyncio gRPC task wrappers...")
-    await asyncio.gather(session_task, key_task)
+    await asyncio.gather(session_task, key_task, quit_task)
     logger.info("All tasks stopped. Exiting.")
     os._exit(0)
 

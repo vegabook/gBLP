@@ -32,6 +32,8 @@ from colorama import Fore, Back, Style, init as colinit; colinit()
 from collections import deque, defaultdict
 import IPython
 from queue import Queue
+from rich.console import Console; console = Console()
+from rich.traceback import install; install()
 
 from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
         RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS)
@@ -56,7 +58,7 @@ logger = logging.getLogger(__name__)
 class Cession:
     def __init__(self,
                  name=None,
-                 handler = None,
+                 handler_class = None, #This is a class
                  grpchost="localhost",
                  grpcport=50051,
                  grpckeyport=50052,
@@ -73,10 +75,13 @@ class Cession:
         self.defaultInterval = defaultInterval
         self.serverEventQueueSize = serverEventQueueSize
         self.alive = False
-        self.handler = handler
-        if self.handler is None:   # create a deque
-            self.subsdata = defaultdict(lambda: deque(maxlen = maxdDequeSize))
-            self.statusLog = []
+        self.done = asyncio.Event()
+        if handler_class is not None:
+            self.handler = handler_class() # instantiate
+        else:
+            self.handler = None
+        self.subsdata = defaultdict(lambda: deque(maxlen = maxdDequeSize)) # store subscription data
+        self.statusLog = [] # store status messages
 
 
     def makeName(self, alphaLength, digitLength):
@@ -91,14 +96,19 @@ class Cession:
 
     def open(self):
         # Start the event loop in a new thread
-        self.loop = asyncio.new_event_loop()
-        self.thread = threading.Thread(target=self.start_loop, args=(self.loop,), daemon=False)
-        self.thread.start()
-        # Run asynchronous initialization in the event loop
-        self.run_async(self.async_init())
-        self.run_async_nowait(self.subscriptionsStream())
-        logger.info("Subscription stream started.")
-        self.alive = True
+        if not self.alive:
+            self.loop = asyncio.new_event_loop()
+            self.loop.name = "CessionLoop"
+            self.thread = threading.Thread(target=self.start_loop, args=(self.loop,), daemon=False)
+            self.thread.start()
+            # Run asynchronous initialization in the event loop
+            self.run_async(self.async_init())
+            self.stream = self.stub.subscriptionStream(self.gsession)
+            self.run_async_nowait(self.subscriptionsStream(self.stream))
+            logger.info("Subscription stream started.")
+            self.alive = True
+        else:
+            logger.info("Session already open.")
 
     def start_loop(self, loop):
         asyncio.set_event_loop(loop)
@@ -198,10 +208,16 @@ class Cession:
         await self.channel.close()
 
     def close(self):
-        self.run_async(self.closeSession())
-        # Stop the event loop and thread
-        self.loop.call_soon_threadsafe(self.loop.stop())
-        self.thread.join()
+        if self.alive:
+            # Close the session
+            self.stream.cancel()
+            self.run_async(self.closeSession())
+            self.loop.stop()
+            # Stop the event loop and thread
+            self.thread.join(timeout=1)
+            self.alive = False
+        else:
+            logger.info("Session already closed.")
 
     def historicalDataRequest(self, 
                               topics, 
@@ -259,18 +275,20 @@ class Cession:
     def unsubscribe(self, topics):
         pass
 
-    async def subscriptionsStream(self, handler = None):
-        async for response in self.stub.subscriptionStream(self.gsession):
+    async def subscriptionsStream(self, stream):
+        async for response in stream:
             try:
-                if self.handler:
-                    self.run_async(self.handler.handle(response))
+                if response.msgtype in (RESP_SUB, RESP_BAR):
+                    self.subsdata[response.topic].append(response)
+                elif response.msgtype in (RESP_STATUS, RESP_ERROR):
+                    self.statusLog.append(response)
                 else:
-                    if response.msgtype in (RESP_SUB, RESP_BAR):
-                        self.subsdata[response.topic].append(response)
-                    elif response.msgtype in (RESP_STATUS, RESP_ERROR):
-                        self.statusLog.append(response)
-                    else:
-                        pass
+                    pass
+                if self.handler:
+                    #self.loop.call_soon_threadsafe(self.handler.handle, response)
+                    asyncio.run_coroutine_threadsafe(self.handler.handle(response), self.loop)
+                if self.done.is_set():
+                    break
             except Exception as e:
                 print(f"Error: {e}")
 
@@ -284,38 +302,36 @@ class Cession:
         return self.run_async(self.async_sessionInfo()) 
 
 
-
-
 class Handler():
-    """ Optional handler class to handle subscription responses """
+    """ Optional handler class to handle subscription responses. 
+        This must be sent as a class and not as an instance, because it
+        will be instantiated in the Cession class. """
 
-    def __init__(self, follow_handler = None):
-        # this will store by topic 
-        self.follow_handler = follow_handler # can chain more handlers here
+    def __init__(self):
+        self.mysubsdata = defaultdict(lambda: deque(maxlen = 1000))
+        self.statusLog = deque(maxlen = 1000)
     
     async def handle(self, response):
         # this function must be present in any handler
         try:
             if response.msgtype in (RESP_SUB, RESP_BAR):
+                self.statusLog.append(response)
                 print(Fore.GREEN, f"Received: {response}", Style.RESET_ALL)
             else:
+                self.mysubsdata[response.topic].append(response)
                 print(Fore.MAGENTA, Style.BRIGHT, f"Received: {response}", Style.RESET_ALL)
-            if self.follow_handler:
-                self.follow_handler.handle(response)
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"{Fore.MAGENTA}Error: {e}{Style.RESET_ALL}")
 
 
 def syncmain():
 
-    print_handler = Handler()
-
     cess = Cession(
         grpchost=args.grpchost,
         grpcport=args.grpcport,
-        grpckeyport=args.grpckeyport
+        grpckeyport=args.grpckeyport,
+        handler_class = Handler  # Optional handler class that will run in addition to defaul handler
     )
-    #handler=print_handler # TODO NOT WORKING
     cess.open()
 
     # Request historical data
@@ -328,7 +344,7 @@ def syncmain():
     print(hist)
 
     hist = cess.historicalDataRequest(
-        ["AAPL US Equity", "GOOg US Equity"],
+        ["AAPL US Equity", "GOOG US Equity"],
         ["PX_BID"],
         dt.datetime(2023, 11, 28),
         dt.datetime(2023, 11, 30)
@@ -343,11 +359,15 @@ def syncmain():
     )
     print(hist)
 
+
     # Enter IPython shell
     IPython.embed()
 
     # After exiting IPython, close the session
     cess.close()
+    for th in threading.enumerate(): 
+        if not th.name == "MainThread":
+            console.print(f"[bold magenta]Thread {th.name} is still running[/bold magenta]")
 
 if __name__ == "__main__":
     # TODO move certs into another class
@@ -355,7 +375,13 @@ if __name__ == "__main__":
         mycess = Cession()
         mycess.delCerts()
     else:
-        syncmain()
+        try:
+            syncmain()
+        except KeyboardInterrupt:
+            print("Keyboard interrupt")
+        finally:
+            pass
+
 
 
 
