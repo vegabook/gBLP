@@ -24,6 +24,7 @@ import random
 from pathlib import Path
 import datetime as dt
 import time
+import os
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 from util.certMaker import get_conf_dir
 import getpass
@@ -112,7 +113,14 @@ class Cession:
 
     def start_loop(self, loop):
         asyncio.set_event_loop(loop)
-        loop.run_forever()
+        try:
+            loop.run_until_complete(self.done.wait())
+        except asyncio.CancelledError:
+            logger.info("Event loop cancelled.")
+        finally:
+            logger.info("Outta here")
+            checkThreads()
+
 
     def run_async(self, coro):
         """Schedules a coroutine to be run on the event loop."""
@@ -209,15 +217,36 @@ class Cession:
 
     def close(self):
         if self.alive:
-            # Close the session
+            logger.info("Closing stream")
             self.stream.cancel()
-            self.run_async(self.closeSession())
-            self.loop.stop()
+            logger.info("Running async shutdown")
+            self.run_async(self.shutdown())
             # Stop the event loop and thread
-            self.thread.join(timeout=1)
+            logger.info("Joining thread")
+            self.thread.join()
+            logger.info("Setting alive False")
             self.alive = False
         else:
             logger.info("Session already closed.")
+
+
+    async def shutdown(self):
+        logger.info("closing grpc session")
+        await self.closeSession()
+        # Cancel all pending tasks in the event loop
+        logger.info("Obtaining all tasks")
+        tasks = [task for task in asyncio.all_tasks(self.loop) if task is not asyncio.current_task(self.loop)]
+        for task in tasks:
+            logger.info(f"Cancelling task: {task}")
+            task.cancel()
+        os._exit(0)
+        logger.info("Gathering tasks")
+        await asyncio.gather(*tasks, return_exceptions=True)
+        # Stop the event loop
+        logger.info("Stopping loop")
+        self.done.set()
+        self.loop.stop()
+
 
     def historicalDataRequest(self, 
                               topics, 
@@ -289,8 +318,14 @@ class Cession:
                     asyncio.run_coroutine_threadsafe(self.handler.handle(response), self.loop)
                 if self.done.is_set():
                     break
+            except asyncio.CancelledError:
+                logger.info("subscriptionsStream was cancelled.")
+                # Properly cancel the stream
+                await stream.cancel()
             except Exception as e:
-                print(f"Error: {e}")
+                logger.error(f"Error in subscriptionsStream: {e}")
+            finally:
+                logger.info("subscriptionsStream ended.")
 
 
     async def async_sessionInfo(self):
@@ -325,7 +360,6 @@ class Handler():
 
 
 def syncmain():
-
     cess = Cession(
         grpchost=args.grpchost,
         grpcport=args.grpcport,
@@ -343,28 +377,14 @@ def syncmain():
     )
     print(hist)
 
-    hist = cess.historicalDataRequest(
-        ["AAPL US Equity", "GOOG US Equity"],
-        ["PX_BID"],
-        dt.datetime(2023, 11, 28),
-        dt.datetime(2023, 11, 30)
-    )
-    print(hist)
+    #cess.subscribe(["XBTUSD Curncy"])
 
-    hist = cess.historicalDataRequest(
-        ["R186 Govt"],
-        ["PX_ASK"],
-        dt.datetime(2023, 11, 28),
-        dt.datetime(2023, 11, 30)
-    )
-    print(hist)
-
-
-    # Enter IPython shell
-    IPython.embed()
+    return cess
 
     # After exiting IPython, close the session
     cess.close()
+
+def checkThreads():
     for th in threading.enumerate(): 
         if not th.name == "MainThread":
             console.print(f"[bold magenta]Thread {th.name} is still running[/bold magenta]")
@@ -376,7 +396,10 @@ if __name__ == "__main__":
         mycess.delCerts()
     else:
         try:
-            syncmain()
+            cess = syncmain()
+            import time
+            time.sleep(3)
+            cess.close()
         except KeyboardInterrupt:
             print("Keyboard interrupt")
         finally:

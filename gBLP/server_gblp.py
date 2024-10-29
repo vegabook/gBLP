@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
+import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import logging
 import string
 import random
@@ -28,6 +28,7 @@ from functools import partial
 import queue
 import blpapi
 import msvcrt
+import traceback
 
 import grpc
 from bloomberg_pb2 import Session
@@ -84,22 +85,21 @@ logger = logging.getLogger(__name__)
 
 NUMBER_OF_REPLY = 10
 
-# ------------------- TODO ---------------------
-# when clients disconnect, grpc is keeping resources around
 
 # ----------------- thread creation tracking ----------------------
 def trace_function(frame, event, arg):
     """Trace function that will be called for every line of code in every thread."""
-    if event == 'call':
-        console.print(f"[bold blue]Calling function: {frame.f_code.co_name} in {threading.current_thread().name}")
-    elif event == 'line':
-        console.print(f"[bold green]Line {frame.f_lineno} in {frame.f_code.co_name} in {threading.current_thread().name}")
-    elif event == 'return':
-        console.print(f"[bold red]Returning from {frame.f_code.co_name} in {threading.current_thread().name}")
-    return trace_function  # Return itself to continue tracing
+    if threading.current_thread().name != "asyncio_0":
+        if event == 'call':
+            console.print(f"[bold blue]Calling function: {frame.f_code.co_name} in {threading.current_thread().name}")
+        elif event == 'line':
+            console.print(f"[bold green]Line {frame.f_lineno} in {frame.f_code.co_name} in {threading.current_thread().name}")
+        elif event == 'return':
+            console.print(f"[bold red]Returning from {frame.f_code.co_name} in {threading.current_thread().name}")
+        return trace_function  # Return itself to continue tracing
 
 # Set this trace function to be used for all new threads
-#threading.settrace(trace_function)
+threading.settrace(trace_function)
 # ----------------- util functions ----------------------
 
 def serialize_datetime(obj): 
@@ -186,11 +186,11 @@ class KeyManager(KeyManagerServicer):
             context.abort(grpc.StatusCode.PERMISSION_DENIED, "Request denied")
 
 
-async def serveSessions(grpcServer) -> None:
+async def serveSessions(sessionsServer) -> None:
 
     listenAddr = f"{globalOptions.grpchost}:{globalOptions.grpcport}"
     sessionsManager = SessionsManager()
-    add_SessionsManagerServicer_to_server(sessionsManager, grpcServer)
+    add_SessionsManagerServicer_to_server(sessionsManager, sessionsServer)
 
     # first check if the certs are there
     confdir = get_conf_dir()
@@ -219,11 +219,11 @@ async def serveSessions(grpcServer) -> None:
         root_certificates=CAcert,
         require_client_auth=True,  # Require clients to provide valid certificates
     )
-    grpcServer.add_secure_port(listenAddr, serverCredentials) 
+    sessionsServer.add_secure_port(listenAddr, serverCredentials) 
 
-    await grpcServer.start()
+    await sessionsServer.start()
     logging.info(f"Starting session server on {listenAddr}")
-    await grpcServer.wait_for_termination()
+    await sessionsServer.wait_for_termination()
     await sessionsManager.closeAllSessions()
     logging.info("Sessions server stopped.")
     #raise # propagate
@@ -273,8 +273,9 @@ class SessionRunner(object):
                               "CategorizedFieldSearchRequest": "//blp/apiflds",
                               "studyRequest": "//blp/tasvc",
                               "SnapshotRequest": "//blp/mktlist"}
-        self.subq = queue.Queue()
+        self.subq = asyncio.Queue()
         self.numDispatcherThreads = 1 # if > 1 then threaded dispatchers will be created
+        self.loop = asyncio.get_event_loop()
 
 
 
@@ -317,16 +318,16 @@ class SessionRunner(object):
         sessionOptions = createSessionOptions(globalOptions) 
         sessionOptions.setMaxEventQueueSize(self.maxEventQueueSize)
         sessionOptions.setSessionName(self.name)
-        handler = EventHandler(parent = self)
+        self.handler = EventHandler(parent = self)
         if self.numDispatcherThreads > 1:
             self.eventDispatcher = blpapi.EventDispatcher(numDispatcherThreads=self.numDispatcherThreads) 
             self.eventDispatcher.start()
             self.session = blpapi.Session(sessionOptions, 
-                                          eventHandler=handler.processEvent,
+                                          eventHandler=self.handler.processEvent,
                                           eventDispatcher=self.eventDispatcher)
         else:
             self.session = blpapi.Session(sessionOptions, 
-                                          eventHandler=handler.processEvent)
+                                          eventHandler=self.handler.processEvent)
         if not self.session.start():
             logger.error("Failed to start session.")
             self.alive = False
@@ -365,14 +366,12 @@ class SessionRunner(object):
         corrString = ''.join(random.choices(string.ascii_uppercase + string.digits, k=32))
         correlationId = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
-        q = queue.Queue()
+        q = asyncio.Queue()
         self.correlators[corrString] = {"request": request, "queue": q}
         self.session.sendRequest(bbgRequest, correlationId=correlationId)
-        # TODO what happens if bad request?
-        loop = asyncio.get_event_loop()
         messageList = []
         while True:
-            msg = await loop.run_in_executor(None, q.get)
+            msg = await q.get()
             messageList.append(msg[1]["data"])
             if not msg[1]["partial"]:
                 break
@@ -439,6 +438,8 @@ class SessionsManager(SessionsManagerServicer):
     def __init__(self):
         self.sessions = dict() # the sessions
         self.maxSessions = 7
+
+    # NB TODO openSession needs to start up front and not be for each client. One global session. That's it. 
 
     async def openSession(self, options: SessionOptions, 
                           context: grpc.aio.ServicerContext) -> Session:
@@ -511,15 +512,13 @@ class SessionsManager(SessionsManagerServicer):
         if not session.alive:
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Session not open")
 
-        loop = asyncio.get_event_loop()
         while not done.is_set():
             # Get messages from the session's queue
             # async get from the queue
             try:
-                msg = await loop.run_in_executor(None, session.subq.get)  
-            except asyncio.TimeoutError:
-                logger.error("Timeout while waiting for message from the queue")
-                continue  # Handle timeout by continuing or breaking, depending on your logic
+                msg = await session.subq.get()
+            except asyncio.CancelledError:
+                break
             response = buildSubscriptionDataResponse(msg)
             yield response
         logger.info("Subscription stream closed")
@@ -541,7 +540,7 @@ class SessionsManager(SessionsManagerServicer):
             del self.sessions[sname]
 
 
-async def quit_process():
+async def keypressDetector():
     while not done.is_set():
         # Offload the blocking part to a different thread
         key = await asyncio.to_thread(check_keypress)
@@ -549,13 +548,11 @@ async def quit_process():
         if key == b'q':
             print("Q pressed")
             done.set()
-            return
         elif key == b't':
-            for th in threading.enumerate(): 
-                if not th.name == "MainThread":
-                    console.print(f"[bold magenta]Thread {th.name} is running[/bold magenta]")
+            printThreads()
 
         await asyncio.sleep(0.1)
+    logger.info("Keypress detector stopped.")
 
 
 def check_keypress():
@@ -564,25 +561,30 @@ def check_keypress():
         return msvcrt.getch()
     return None
 
+def printThreads(id = ""):
+    console.print(f"[bold magenta]----------------------------------------------------------------{id}")
+    for th in threading.enumerate(): 
+        if not th.name == "MainThread":
+            console.print(f"[bold magenta]Thread {th.name} is running[/bold magenta]")
 
 async def main():
-    grpcServer = grpc.aio.server()
+    sessionsServer = grpc.aio.server()
     keyServer = grpc.aio.server()
-    session_task = asyncio.create_task(serveSessions(grpcServer))
+    session_task = asyncio.create_task(serveSessions(sessionsServer))
     key_task = asyncio.create_task(keySession(keyServer))
     console.print("[bold red on white blink]Press Q to stop the server")
     console.print("[bold blue]--------------------------------")
-    quit_task = await asyncio.create_task(quit_process()) 
+    keypress_task =asyncio.create_task(keypressDetector()) 
     print("waiting")
-    done.wait()
+    await done.wait()
     print("waited")
     logger.info("done waiting for. Stopping gRPC servers...")
-    await grpcServer.stop(grace=3)
+    await sessionsServer.stop(grace=3)
     logger.info("gRPC server stopped.") 
     await keyServer.stop(grace=3)
     logger.info("Key server stopped.")
     logger.info("Gathering asyncio gRPC task wrappers...")
-    await asyncio.gather(session_task, key_task, quit_task)
+    await asyncio.gather(session_task, key_task, keypress_task)
     logger.info("All tasks stopped. Exiting.")
     os._exit(0)
 
@@ -607,6 +609,7 @@ if __name__ == "__main__":
             console.print("[bold white on red] Killing all threads and processes.")
             done.set()
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Caught exception {e}")
         finally:
             for th in threading.enumerate(): 

@@ -26,8 +26,8 @@ class EventHandler(object):
             logger.info((f"Received response to request {msg.getRequestId()} "
                         f"partial {partial}"))
             sendmsg = (RESP_REF, {"cid": cid, "partial": partial, "data": msg.toPy()})
-            # now put message into correct queue
-            self.parent.correlators[cid]["queue"].put(sendmsg)
+            # now put message into correct asyncio queue. Ceremony here is because we're calling async from sync
+            self.parent.loop.call_soon_threadsafe(self.parent.correlators[cid]["queue"].put_nowait, sendmsg)
 
     def processSubscriptionStatus(self, event):
         timestamp = self.getTimeStamp()
@@ -53,7 +53,7 @@ class EventHandler(object):
                 # unhandled message types
                 sendmsg = None
             if sendmsg:
-                self.parent.subq.put(sendmsg)
+                self.parent.loop.call_soon_threadsafe(self.parent.subq.put_nowait, sendmsg)
 
     def searchMsg(self, msg, fields):
         return [{"field": field, "value": msg[field]} 
@@ -92,7 +92,6 @@ class EventHandler(object):
                 sendmsg = (RESP_BAR, self.makeBarMessage(msg, str(msgtype), 
                                                           topic, interval = 1))
                 print(Fore.RED, Style.BRIGHT, sendmsg, Style.RESET_ALL)
-                #self.parent.correlators[cid]["queue"].put(sendmsg)
 
             # subscription --->
             elif msgtype == blpapi.Name("MarketDataEvents"):
@@ -101,7 +100,7 @@ class EventHandler(object):
                        {"timestamp": timestampdt, 
                        "topic": topic,
                        "prices": self.searchMsg(msg, DEFAULT_FIELDS)})
-                self.parent.subq.put(sendmsg)
+                self.parent.loop.call_soon_threadsafe(self.parent.subq.put_nowait, sendmsg)
 
             # something else --->
             else:
@@ -110,7 +109,6 @@ class EventHandler(object):
     def processMiscEvents(self, event):
         for msg in event:
             sendmsg = (RESP_STATUS, str(msg.messageType()))
-            #self.parent.correlators[cid]["queue"].put(sendmsg)
 
 
     def processEvent(self, event, _session):
