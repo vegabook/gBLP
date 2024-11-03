@@ -17,33 +17,26 @@ service KeyManager {
 }
 
 // Bloomberg API session management
-service SessionsManager {
-
-  rpc getDefaultOptions (google.protobuf.Empty) returns (SessionOptions) {}
-  rpc openSession (SessionOptions) returns (Session) {}
-  rpc subscriptionStream (Session) returns (stream SubscriptionDataResponse) {} 
-  rpc subscribe(Session) returns (Session) {}
-  rpc unsubscribe(Session) returns (Session) {}
-  rpc sessionInfo (Session) returns (Session) {}
-  rpc closeSession (Session) returns (Session) {}
+service Bbg {
+  rpc subscriptionStream(google.protobuf.Empty) returns (stream SubscriptionDataResponse) {} 
+  rpc subscribe(SubscriptionList) returns (SubscriptionList) {}
+  rpc unsubscribe(SubscriptionList) returns (SubscriptionList) {}
   rpc historicalDataRequest (HistoricalDataRequest) returns (HistoricalDataResponse) {}
-  rpc shutAllSessions (google.protobuf.Empty) returns (google.protobuf.Empty) {}
   //rpc intradayTickRequest. maybe "tick" or "gblpTick"
   //rpc intradayBarRequest maybe "bar"
   //rpc historicalDataRequest "daily"
   //rpc referenceDataRequest "ref"
 }
 
-// The request message containing the user's name and how many greetings
-// they want.
-message SessionOptions {
+
+/////////////// Common  /////////////////
+
+message ClientID {
   string name = 1;
-  int32 interval = 2; // subscription interval in seconds
-  int32 maxEventQueueSize = 3; // event queue size
 }
 
-
 /////////////// Subscription /////////////////
+
 
 message Topic {
   enum topicType {
@@ -54,14 +47,15 @@ message Topic {
   }
   string name = 1;
   topicType type = 2; 
-  repeated string fields = 3;
+  string field = 3;
   int32 interval = 4;
   bool validated = 5;
   bool terminated = 6;
 }
 
 message SubscriptionList {
-  repeated Topic topics = 1;
+  ClientID cid = 1;
+  repeated Topic topics = 2;
 }
 
 message SubscriptionDataResponse {
@@ -80,17 +74,11 @@ message SubFieldData {
 }
 
 
-message Session {
-  string name = 1;
-  repeated string services = 2;
-  SubscriptionList subscriptionList = 3;
-  bool alive = 4;
-}
 
 /////////////// Historical data //////////////////
 
 message HistoricalDataRequest {
-  Session session = 1;
+  ClientID cid = 1;
   repeated string topics = 2; // securities
   repeated string fields = 3; // fields list
   google.protobuf.Timestamp start = 4; // startDate
@@ -143,13 +131,13 @@ message KeyResponse {
 
 message Ping
 {
-  Session session = 1;
+  ClientID cid = 1;
   google.protobuf.Timestamp timestamp = 2;
 }
 
 message Pong
 {
-  Session session = 1;
+  ClientID cid = 1;
   google.protobuf.Timestamp timestamp = 2;
 }
 

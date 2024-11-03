@@ -31,8 +31,7 @@ import msvcrt
 import traceback
 
 import grpc
-from bloomberg_pb2 import Session
-from bloomberg_pb2 import SessionOptions
+from bloomberg_pb2 import ClientID
 from bloomberg_pb2 import HistoricalDataRequest 
 from bloomberg_pb2 import KeyRequestId, KeyResponse
 from bloomberg_pb2 import HistoricalDataResponse
@@ -40,8 +39,8 @@ from bloomberg_pb2 import SubscriptionList
 from bloomberg_pb2 import SubscriptionDataResponse
 from bloomberg_pb2 import Topic
 
-from bloomberg_pb2_grpc import SessionsManagerServicer, KeyManagerServicer
-from bloomberg_pb2_grpc import add_SessionsManagerServicer_to_server, \
+from bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
+from bloomberg_pb2_grpc import add_BbgServicer_to_server, \
     add_KeyManagerServicer_to_server
 
 from responseParsers import (
@@ -68,6 +67,7 @@ from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
         RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS)
 
 from util.certMaker import get_conf_dir, make_client_certs, make_all_certs
+from util.utils import makeName
 from cryptography.hazmat.primitives import serialization, hashes
 
 from rich.console import Console; console = Console()
@@ -186,11 +186,11 @@ class KeyManager(KeyManagerServicer):
             context.abort(grpc.StatusCode.PERMISSION_DENIED, "Request denied")
 
 
-async def serveSessions(sessionsServer) -> None:
+async def serveBbgSession(bbgAioServer) -> None:
 
     listenAddr = f"{globalOptions.grpchost}:{globalOptions.grpcport}"
-    sessionsManager = SessionsManager()
-    add_SessionsManagerServicer_to_server(sessionsManager, sessionsServer)
+    bbgManager = Bbg()
+    add_BbgServicer_to_server(bbgManager, bbgAioServer)
 
     # first check if the certs are there
     confdir = get_conf_dir()
@@ -219,25 +219,25 @@ async def serveSessions(sessionsServer) -> None:
         root_certificates=CAcert,
         require_client_auth=True,  # Require clients to provide valid certificates
     )
-    sessionsServer.add_secure_port(listenAddr, serverCredentials) 
+    bbgAioServer.add_secure_port(listenAddr, serverCredentials) 
 
-    await sessionsServer.start()
+    await bbgAioServer.start()
     logging.info(f"Starting session server on {listenAddr}")
-    await sessionsServer.wait_for_termination()
-    await sessionsManager.closeAllSessions()
+    await bbgAioServer.wait_for_termination()
+    await bbgManager.close()
     logging.info("Sessions server stopped.")
     #raise # propagate
 
 
-async def keySession(keyServer) -> None:
+async def keySession(keyAioServer) -> None:
 
     keyListenAddr = f"{globalOptions.grpchost}:{globalOptions.grpckeyport}"
-    add_KeyManagerServicer_to_server(KeyManager(), keyServer)
-    keyServer.add_insecure_port(keyListenAddr) # this listens without credentials
+    add_KeyManagerServicer_to_server(KeyManager(), keyAioServer)
+    keyAioServer.add_insecure_port(keyListenAddr) # this listens without credentials
 
-    await keyServer.start()
+    await keyAioServer.start()
     logging.info(f"Starting key server on {keyListenAddr}")
-    await keyServer.wait_for_termination()
+    await keyAioServer.wait_for_termination()
     logging.info("Key server stopped.")
 
 
@@ -245,16 +245,13 @@ async def keySession(keyServer) -> None:
 # -------------------- individual session handler ----------------------
 
 class SessionRunner(object):
-    def __init__(self, options: SessionOptions):
-        self.name = options.name
+    def __init__(self, options):
         self.interval = options.interval # subscription interval
-        self.maxEventQueueSize = options.maxEventQueueSize
+        self.maxEventQueueSize = 10000
         self.servicesOpen = dict()
-        self.correlators = dict()
-        self.partialAccumulator = defaultdict(list)
+        self.correlators = defaultdict(set)
         self.alive = False
         self.session = None # must SessionRunner.open() one first
-        self.subscriptionList = SubscriptionList() # grpc subscription list not bloomberg
         self.servicesAvail = {"Subscribe": "//blp/mktdata",
                               "UnSubscribe": "//blp/mktdata",
                               "BarSubscribe": "//blp/mktbar",
@@ -275,8 +272,8 @@ class SessionRunner(object):
                               "SnapshotRequest": "//blp/mktlist"}
         self.subq = asyncio.Queue()
         self.numDispatcherThreads = 1 # if > 1 then threaded dispatchers will be created
-        self.loop = asyncio.get_event_loop()
-
+        self.loop = asyncio.get_event_loop() # used by the event handler
+        self.open()
 
 
     def _getService(self, serviceReq: str) -> bool:
@@ -305,19 +302,11 @@ class SessionRunner(object):
         return (True, request)
 
 
-    def grpcRepresentation(self) -> Session:
-        """ return the session representation in gRPC terms """
-        return Session(name=self.name, 
-                       services=self.servicesAvail.keys(), 
-                       alive=self.alive, 
-                       subscriptionList=self.subscriptionList)
-
-    async def open(self):
+    def open(self):
         """ open the session and associated services """
         # setup the correct options
         sessionOptions = createSessionOptions(globalOptions) 
         sessionOptions.setMaxEventQueueSize(self.maxEventQueueSize)
-        sessionOptions.setSessionName(self.name)
         self.handler = EventHandler(parent = self)
         if self.numDispatcherThreads > 1:
             self.eventDispatcher = blpapi.EventDispatcher(numDispatcherThreads=self.numDispatcherThreads) 
@@ -335,9 +324,7 @@ class SessionRunner(object):
             logger.info("Session started.")
             self.alive = True
         # return all the details over gRPC
-        grpcrep = self.grpcRepresentation()
-        logger.debug(f"Session opened {grpcrep}")
-        return grpcrep
+        logger.debug(f"Session opened")
 
     async def close(self):
         """ close the session """
@@ -345,15 +332,15 @@ class SessionRunner(object):
         if self.numDispatcherThreads > 1:
             self.eventDispatcher.stop()
         self.alive = False
-        logger.info(f"Session {self.name} closed")
-        return self.grpcRepresentation()
+        logger.info(f"Bloomberg session closed")
 
-    async def historicalDataRequest(self, request: HistoricalDataRequest) -> list:
+    async def historicalDataRequest(self, request: HistoricalDataRequest, q: asyncio.Queue) -> list:
         """ request historical data """
+        cid = request.cid
         logger.info(f"Requesting historical data {request}")
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
-            return None
+            return False
         logger.info(f"setting securities {request.topics}")
         dtstart = request.start.ToDatetime().strftime("%Y%m%d")
         dtend = request.end.ToDatetime().strftime("%Y%m%d")
@@ -363,61 +350,50 @@ class SessionRunner(object):
                        "endDate": dtend}
         bbgRequest.fromPy(requestDict)
         # create a random 32-character string as the correlationId
-        corrString = ''.join(random.choices(string.ascii_uppercase + string.digits, k=32))
-        correlationId = blpapi.CorrelationId(corrString)
+        corrString = f"hist:{cid.name}:{makeName(alphaLength = 32, digitLength = 0)}"
+        correlid = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
-        q = asyncio.Queue()
-        self.correlators[corrString] = {"request": request, "queue": q}
-        self.session.sendRequest(bbgRequest, correlationId=correlationId)
-        messageList = []
-        while True:
-            msg = await q.get()
-            messageList.append(msg[1]["data"])
-            if not msg[1]["partial"]:
-                break
-        # remove self correlators
-        del self.correlators[corrString]
-        return messageList
+        self.correlators[corrString].add((cid.name, q))
+        self.session.sendRequest(bbgRequest, correlationId=correlid)
+
 
     # ------------ subscriptions -------------------
 
-    async def subscribe(self, gsession: Session):
+    async def subscribe(self, subscriptionList: SubscriptionList, subq: asyncio.Queue):
         """ subscribe to a list of topics """
         
         # make sure the service is open
+        cid = subscriptionList.cid
         success, service = self._getService("Subscribe")
         if not success:
             return self.grpcRepresentation()
-        # create the subscription list
-        ntl = [x.name for x in gsession.subscriptionList.topics] # existing topics
-        etl= [x.name for x in self.subscriptionList.topics] # new topics
-        # find the difference
-        difftl = list(set(ntl) - set(etl)) # new topics to subscribe to
-        if not difftl:
-            logger.info("No new topics to subscribe to")
-            return self.grpcRepresentation()
+        # split out the subscriptionList
+        etl= [(t.name, t.type, t.interval, t.field) 
+            for t in self.subscriptionList.topics]
         logger.info(f"Subscribing to {difftl}")
         bbgsublist = blpapi.SubscriptionList()
-        for topic in gsession.subscriptionList.topics:
-            if topic.name in difftl:
-                topicTypeName = Topic.topicType.Name(topic.type) # SEDOL1/TICKER/CUSIP etc
-                substring = f"{service}/{topicTypeName}/{topic.name}"
-                if topic.fields == []:
-                    fields = ["LAST_PRICE"]
-                if topic.interval is None:
-                    intervalstr = "interval=2"
-                else:
-                    intervalstr = f"interval={int(topic.interval)}"
-                cid = blpapi.CorrelationId(topic.name)
-                bbgsublist.add(substring, topic.fields, intervalstr, cid)
-                self.subscriptionList.topics.append(topic)
-        # extend the subscription list
+        for tname, ttype, tinterval, tfield in etl:
+            corrString = f"sub:{tname}:{ttype}:{tinterval}:{tfield}"
+            if not (tname, ttype, tinterval, tfield) in self.correlators:
+                topicTypeName = Topic.topicType.Name(ttype) # SEDOL1/TICKER/CUSIP etc
+                substring = f"{service}/{ttype}/{tname}"
+                intervalstr = f"interval={int(topic.interval)}"
+                correlid = blpapi.CorrelationId(corrString)
+                bbgsublist.add(substring, topic.fields, intervalstr, correlid)
+                self.subscribed.add((tname, ttype, tinterval, tfield))
+            self.correlators[corrString].add((cid.name, subq))
+
+            
+
+
+        # extend the subscription lisR
         self.session.subscribe(bbgsublist)
-        return self.grpcRepresentation()
+        return True
 
 
-    async def unsubscribe(self, gsession: Session):
-        print(f"unsubcribing TODO {gsession}")
+    async def unsubscribe(self, subscriptionList: SubscriptionList):
+        """ unsubscribe from a list of topics """
+        print(f"unsubcribing TODO")
 
 
     async def _sendInfo(self, command, bbgRequest):
@@ -431,92 +407,59 @@ class SessionRunner(object):
 # ----------------- multiple sessions are managed here ----------------------
 
 
-class SessionsManager(SessionsManagerServicer):
+class Bbg(BbgServicer):
     # implements all the gRPC methods for the session manager
     # and communicates with the SessionRunner(s)
 
     def __init__(self):
-        self.sessions = dict() # the sessions
-        self.maxSessions = 7
+        self.session = SessionRunner(options=globalOptions)
+        self.grpc_rep = self.session.open()
+        self.queues = dict()
 
-    # NB TODO openSession needs to start up front and not be for each client. One global session. That's it. 
 
-    async def openSession(self, options: SessionOptions, 
-                          context: grpc.aio.ServicerContext) -> Session:
-        if len(self.sessions) >= self.maxSessions:
-            context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, "Too many sessions")
-        print("opening session")
-        auth_context = context.auth_context()
-        print(f"auth_context: {auth_context}")
-        if not options.name in self.sessions:
-            logging.info("Serving openSession options %s", options)
-            session = SessionRunner(options=options)
-            grpcRepresentation = await session.open()
-            self.sessions[options.name] = session
-            return grpcRepresentation
-        else:
-            logging.warning(f"Session {options.name} already exists")
-            context.abort(grpc.StatusCode.ALREADY_EXISTS, "Session already exists")
+    async def closeSession(self):
+        await self.session.close()
 
-    async def closeSession(self, gsession: Session, context: grpc.aio.ServicerContext) -> Session:
-        logging.info("Serving closeSession session %s", gsession)
-        session = self.sessions.get(gsession.name)
-        if session:
-            grpcRepresentation = await self.sessions[gsession.name].close()
-            del self.sessions[gsession.name]
-            return grpcRepresentation
-        else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Session not found")
 
-    async def historicalDataRequest(self, 
-                                    request: HistoricalDataRequest, 
+    async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
-        session = self.sessions.get(request.session.name)
-        if session:
-            data = await session.historicalDataRequest(request)
-            if data:    
-                result = buildHistoricalDataResponse(data)
-                return result 
-            else:
-                context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+        q = asyncio.Queue()
+        messageList = []
+        await self.session.historicalDataRequest(request, q)
+        while True:
+            msg = await q.get()
+            messageList.append(msg[1]["data"])
+            if not msg[1]["partial"]:
+                break
+        if messageList:    
+            result = buildHistoricalDataResponse(messageList)
+            return result 
         else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Session not found")
+            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
-    async def subscribe(self, gsession: Session, context: grpc.aio.ServicerContext) -> Session:
-        session = self.sessions.get(gsession.name)
-        if session:
-            if not session.alive:
-                context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Session not open")
-            await session.subscribe(gsession)
-            return session.grpcRepresentation()
-        else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Session not found")
+    async def subscribe(self, subscriptionList: SubscriptionList, 
+                        context: grpc.aio.ServicerContext) -> SubscriptionList:
+        cidname = dict(context.invocation_metadata())["cidname"]
+        subq = self.queues[cidname]
+        await self.session.subscribe(subscriptionList, subq)
 
 
-    async def unsubscribe(self, gsession: Session, context: grpc.aio.ServicerContext) -> Session:
-        session = self.sessions.get(gsession.name)
-        if session:
-            if not session.alive:
-                context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Session not open")
-            await session.unsubscribe(gsession)
-            return session.grpcRepresentation()
-        else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Session not found")
+    async def unsubscribe(self, 
+                          subscriptionList: SubscriptionList, 
+                          context: grpc.aio.ServicerContext) -> SubscriptionList:
+        await self.session.unsubscribe(subscriptionList)
 
 
-    async def subscriptionStream(self, gsession: Session, context: grpc.aio.ServicerContext): 
-        session = self.sessions.get(gsession.name)
-        if not session:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Session not found")
-        if not session.alive:
-            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Session not open")
-
+    async def subscriptionStream(self, request, context: grpc.aio.ServicerContext): 
+        cidname = dict(context.invocation_metadata())["cidname"]
+        subq = asyncio.Queue()
+        self.queues[cidname] = subq
         while not done.is_set():
             # Get messages from the session's queue
             # async get from the queue
             try:
-                msg = await session.subq.get()
+                msg = await subq.get() 
             except asyncio.CancelledError:
                 break
             response = buildSubscriptionDataResponse(msg)
@@ -524,20 +467,8 @@ class SessionsManager(SessionsManagerServicer):
         logger.info("Subscription stream closed")
 
 
-    async def sessionInfo(self, gsession, context):
-        session = self.sessions.get(gsession.name)
-        if not session:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Session not found")
-        else:
-            return session.grpcRepresentation()
-
-    async def closeAllSessions(self):
-        snames = list(self.sessions.keys())
-        for sname in snames:
-            session = self.sessions[sname]
-            logging.info(f"Asking server {sname} to close")
-            await session.close()
-            del self.sessions[sname]
+    async def close(self):
+        await self.session.close()
 
 
 async def keypressDetector():
@@ -568,23 +499,23 @@ def printThreads(id = ""):
             console.print(f"[bold magenta]Thread {th.name} is running[/bold magenta]")
 
 async def main():
-    sessionsServer = grpc.aio.server()
-    keyServer = grpc.aio.server()
-    session_task = asyncio.create_task(serveSessions(sessionsServer))
-    key_task = asyncio.create_task(keySession(keyServer))
+    bbgAioServer = grpc.aio.server()
+    keyAioServer = grpc.aio.server()
+    bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer))
+    keyTask = asyncio.create_task(keySession(keyAioServer))
     console.print("[bold red on white blink]Press Q to stop the server")
     console.print("[bold blue]--------------------------------")
-    keypress_task =asyncio.create_task(keypressDetector()) 
+    keypressTask =asyncio.create_task(keypressDetector()) 
     print("waiting")
     await done.wait()
     print("waited")
     logger.info("done waiting for. Stopping gRPC servers...")
-    await sessionsServer.stop(grace=3)
+    await bbgAioServer.stop(grace=3)
     logger.info("gRPC server stopped.") 
-    await keyServer.stop(grace=3)
+    await keyAioServer.stop(grace=3)
     logger.info("Key server stopped.")
     logger.info("Gathering asyncio gRPC task wrappers...")
-    await asyncio.gather(session_task, key_task, keypress_task)
+    await asyncio.gather(bbgTask, keyTask, keypressTask)
     logger.info("All tasks stopped. Exiting.")
     os._exit(0)
 

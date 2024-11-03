@@ -27,6 +27,7 @@ import time
 import os
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 from util.certMaker import get_conf_dir
+from util.utils import makeName
 import getpass
 import logging
 from colorama import Fore, Back, Style, init as colinit; colinit()
@@ -35,6 +36,7 @@ import IPython
 from queue import Queue
 from rich.console import Console; console = Console()
 from rich.traceback import install; install()
+from google.protobuf import empty_pb2
 
 from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
         RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS)
@@ -56,25 +58,21 @@ logger = logging.getLogger(__name__)
 
 
 
-class Cession:
+class Bbg:
     def __init__(self,
                  name=None,
                  handler_class = None, #This is a class
                  grpchost="localhost",
                  grpcport=50051,
                  grpckeyport=50052,
-                 defaultInterval=5,   # seconds
-                 serverEventQueueSize=100000,
                  maxdDequeSize = 10000):       # max size of deques each holding one topic
         if name is None:
-            self.name = self.makeName(6, 3)
+            self.cid= bloomberg_pb2.ClientID(name=makeName(alphaLength=6, digitLength=3))
         else:
-            self.name = name
+            self.cid = bloomberg_pb2.ClientID(name=name)
         self.grpchost = grpchost
         self.grpcport = grpcport
         self.grpckeyport = grpckeyport
-        self.defaultInterval = defaultInterval
-        self.serverEventQueueSize = serverEventQueueSize
         self.alive = False
         self.done = asyncio.Event()
         if handler_class is not None:
@@ -83,33 +81,17 @@ class Cession:
             self.handler = None
         self.subsdata = defaultdict(lambda: deque(maxlen = maxdDequeSize)) # store subscription data
         self.statusLog = [] # store status messages
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self.start_loop, args=(self.loop,), daemon=False)
+        self.thread.start()
+        # Run asynchronous initialization in the event loop
+        self.run_async(self.async_init())
+        self.stream = self.stub.subscriptionStream(empty_pb2.Empty(), metadata=[("cidname", self.cid.name)])
+        self.run_async_nowait(self.subscriptionsStream(self.stream))
+        logger.info("Subscription stream started.")
+        self.alive = True
+        self.subscriptionList = bloomberg_pb2.SubscriptionList(cid=self.cid)
 
-
-    def makeName(self, alphaLength, digitLength):
-        """Make a dummy name if none provided."""
-        consonants = "bcdfghjklmnpqrstvwxyz"
-        vowels = "aeiou"
-        digits = "0123456789"
-        word = ''.join(random.choice(consonants if i % 2 == 0 else vowels) 
-                       for i in range(alphaLength)) + \
-                       ''.join(random.choice(digits) for i in range(digitLength))
-        return word
-
-    def open(self):
-        # Start the event loop in a new thread
-        if not self.alive:
-            self.loop = asyncio.new_event_loop()
-            self.loop.name = "CessionLoop"
-            self.thread = threading.Thread(target=self.start_loop, args=(self.loop,), daemon=False)
-            self.thread.start()
-            # Run asynchronous initialization in the event loop
-            self.run_async(self.async_init())
-            self.stream = self.stub.subscriptionStream(self.gsession)
-            self.run_async_nowait(self.subscriptionsStream(self.stream))
-            logger.info("Subscription stream started.")
-            self.alive = True
-        else:
-            logger.info("Session already open.")
 
     def start_loop(self, loop):
         asyncio.set_event_loop(loop)
@@ -119,7 +101,7 @@ class Cession:
             logger.info("Event loop cancelled.")
         finally:
             logger.info("Outta here")
-            checkThreads()
+            checkThreads() # DEBUG
 
 
     def run_async(self, coro):
@@ -129,7 +111,6 @@ class Cession:
 
     async def async_init(self):
         await self.connect()
-        await self.openSession()
 
     def run_async_nowait(self, coro):
         """Schedules a coroutine to be run on the event loop without waiting."""
@@ -196,24 +177,8 @@ class Cession:
         hostandport = f"{self.grpchost}:{self.grpcport}"
         logger.info(f"Connecting to {hostandport}...")
         self.channel = grpc.aio.secure_channel(hostandport, client_credentials)
+        self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
 
-    async def openSession(self):
-        stub = bloomberg_pb2_grpc.SessionsManagerStub(self.channel)
-        sessionOptions = bloomberg_pb2.SessionOptions(
-            name=self.name,
-            interval=self.defaultInterval,
-            maxEventQueueSize=self.serverEventQueueSize
-        )
-        gsession = await stub.openSession(sessionOptions)
-        logger.info(f"Opened {self.name} session: {gsession}")
-        self.stub = stub  # Stub for all the gRPC calls
-        gsession.subscriptionList.CopyFrom(bloomberg_pb2.SubscriptionList())
-        self.gsession = gsession
-
-    async def closeSession(self):
-        closedSession = await self.stub.closeSession(self.gsession)
-        logger.info(f"Closed session: {closedSession}")
-        await self.channel.close()
 
     def close(self):
         if self.alive:
@@ -232,8 +197,6 @@ class Cession:
 
     async def shutdown(self):
         logger.info("closing grpc session")
-        await self.closeSession()
-        # Cancel all pending tasks in the event loop
         logger.info("Obtaining all tasks")
         tasks = [task for task in asyncio.all_tasks(self.loop) if task is not asyncio.current_task(self.loop)]
         for task in tasks:
@@ -261,7 +224,7 @@ class Cession:
         est = protoTimestamp()
         est.FromDatetime(end)
         hreq = bloomberg_pb2.HistoricalDataRequest(
-            session=self.gsession,
+            cid=self.cid,
             topics=topics,
             fields=fields,
             start=sst,
@@ -286,19 +249,19 @@ class Cession:
                               type="TICKER",
                               interval=2):
         sub = bloomberg_pb2.SubscriptionList(
+            cid=self.cid,
             topics=[
                 bloomberg_pb2.Topic(
-                    name=x, 
-                    fields=fields, 
+                    name=t, 
+                    field=f,
                     type=type, 
                     interval=interval
-                ) for x in topics
+                ) for t in topics for f in fields   
             ]
         )
-        self.gsession.subscriptionList.CopyFrom(sub)
         # Perform the asynchronous subscribe call
-        self.gsession = await self.stub.subscribe(self.gsession)
-        logger.info(f"Subscribed to topics: {topics}")
+        await self.stub.subscribe(sub, metadata=[("cidname", self.cid.name)])
+        logger.info(f"Subscribed to topics: {sub}")
 
 
     def unsubscribe(self, topics):
@@ -328,19 +291,11 @@ class Cession:
                 logger.info("subscriptionsStream ended.")
 
 
-    async def async_sessionInfo(self):
-        info = await self.stub.sessionInfo(self.gsession)
-        logger.info(f"Session info: {info}")
-        return info
-    
-    def sessionInfo(self):
-        return self.run_async(self.async_sessionInfo()) 
-
 
 class Handler():
     """ Optional handler class to handle subscription responses. 
         This must be sent as a class and not as an instance, because it
-        will be instantiated in the Cession class. """
+        will be instantiated in the Bbg class. """
 
     def __init__(self):
         self.mysubsdata = defaultdict(lambda: deque(maxlen = 1000))
@@ -360,16 +315,15 @@ class Handler():
 
 
 def syncmain():
-    cess = Cession(
+    bbg = Bbg(
         grpchost=args.grpchost,
         grpcport=args.grpcport,
         grpckeyport=args.grpckeyport,
         handler_class = Handler  # Optional handler class that will run in addition to defaul handler
     )
-    cess.open()
 
     # Request historical data
-    hist = cess.historicalDataRequest(
+    hist = bbg.historicalDataRequest(
         ["RNO FP Equity", "MSFT US Equity"],
         ["PX_LAST", "CUR_MKT_CAP"],
         dt.datetime(2023, 11, 28),
@@ -377,12 +331,11 @@ def syncmain():
     )
     print(hist)
 
-    #cess.subscribe(["XBTUSD Curncy"])
+    bbg.subscribe(["XBTUSD Curncy"])
+    IPython.embed
 
-    return cess
+    return bbg
 
-    # After exiting IPython, close the session
-    cess.close()
 
 def checkThreads():
     for th in threading.enumerate(): 
@@ -392,14 +345,14 @@ def checkThreads():
 if __name__ == "__main__":
     # TODO move certs into another class
     if args.delcerts:
-        mycess = Cession()
-        mycess.delCerts()
+        bbg = Bbg()
+        bbg.delCerts()
     else:
         try:
-            cess = syncmain()
+            bbg = syncmain()
             import time
             time.sleep(3)
-            cess.close()
+            bbg.close()
         except KeyboardInterrupt:
             print("Keyboard interrupt")
         finally:

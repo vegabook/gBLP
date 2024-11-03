@@ -17,17 +17,26 @@ class EventHandler(object):
     def __init__(self, parent):
         self.parent = parent
 
+    async def multisend(queues, msg):
+        for q in queues:
+            await q.put(msg)
+
     def getTimeStamp(self):
         return time.strftime("%Y-%m-%d %H:%M:%S")
 
     def processResponseEvent(self, event, partial):
         for msg in event:
-            cid = msg.correlationId().value()
+            correlid = msg.correlationId().value()
             logger.info((f"Received response to request {msg.getRequestId()} "
                         f"partial {partial}"))
-            sendmsg = (RESP_REF, {"cid": cid, "partial": partial, "data": msg.toPy()})
+            sendmsg = (RESP_REF, {"correlid": correlid, "partial": partial, "data": msg.toPy()})
             # now put message into correct asyncio queue. Ceremony here is because we're calling async from sync
-            self.parent.loop.call_soon_threadsafe(self.parent.correlators[cid]["queue"].put_nowait, sendmsg)
+            breakpoint()
+            queue = list(self.parent.correlators[correlid])[0][1] # first and only element of set
+            self.parent.loop.call_soon_threadsafe(queue.put_nowait, sendmsg)
+            if not partial:
+                del self.parent.correlators[correlid]
+
 
     def processSubscriptionStatus(self, event):
         timestamp = self.getTimeStamp()
@@ -35,19 +44,19 @@ class EventHandler(object):
         
         for msg in event:
             pymsg = msg.toPy()
-            cid = msg.correlationId().value()
+            correlid = msg.correlationId().value()
             if msg.messageType() == blpapi.Names.SUBSCRIPTION_FAILURE:
-                sendmsg = (RESP_STATUS, {"topic": cid, "timestamp": timestampdt, "validated": False})
-                idx = [x.name for x in self.parent.subscriptionList.topics].index(cid)
+                sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "validated": False})
+                idx = [x.name for x in self.parent.subscriptionList.topics].index(correlid)
                 self.parent.subscriptionList.topics[idx].validated = False
                 # TODO parent must send a status to the client on this
             elif msg.messageType() == blpapi.Names.SUBSCRIPTION_TERMINATED:
-                sendmsg = (RESP_STATUS, {"topic": cid, "timestamp": timestampdt, "terminated": True})
-                idx = [x.name for x in self.parent.subscriptionList.topics].index(cid)
+                sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "terminated": True})
+                idx = [x.name for x in self.parent.subscriptionList.topics].index(correlid)
                 self.parent.subscriptionList.topics[idx].terminated = True
             elif msg.messageType() == blpapi.Names.SUBSCRIPTION_STARTED:
-                sendmsg = (RESP_STATUS, {"topic": cid, "timestamp": timestampdt, "validated": True})
-                idx = [x.name for x in self.parent.subscriptionList.topics].index(cid)
+                sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "validated": True})
+                idx = [x.name for x in self.parent.subscriptionList.topics].index(correlid)
                 self.parent.subscriptionList.topics[idx].validated = True
             else:
                 # unhandled message types
@@ -82,8 +91,8 @@ class EventHandler(object):
         timestamp = self.getTimeStamp()
         timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         for msg in event:
-            topic = msg.correlationId().value()
             msgtype = msg.messageType()
+            correlid = msg.correlationId().value()
             # bars --->
             if msgtype in (blpapi.Name("MarketBarUpdate"),
                            blpapi.Name("MarketBarStart"),
@@ -98,9 +107,12 @@ class EventHandler(object):
                 # mktdata event type
                 sendmsg = (RESP_SUB, 
                        {"timestamp": timestampdt, 
-                       "topic": topic,
+                       "topic": correlid,
                        "prices": self.searchMsg(msg, DEFAULT_FIELDS)})
-                self.parent.loop.call_soon_threadsafe(self.parent.subq.put_nowait, sendmsg)
+                # now get all the queues that needs this message
+                queues = [x[1] for x in self.parent.correlators[correlid]] 
+                for q in queues:
+                    self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
 
             # something else --->
             else:

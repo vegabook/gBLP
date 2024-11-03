@@ -17,6 +17,10 @@ _This is an alpha work in progress_
 * `subscribe` / `unsubscribe` is working via a threaded async class that does not take over your REPL. 
 
 
+## NB TODO
+* Describe how to subscribe - remember only one field each time
+
+
 ## Description
 Bloomberg provides native APIs for Python, Java, C#, and C++. This project aims to provide a Python-based gRPC server that can be used by any gRPC-capable programming language to access the Bloomberg V3 API. 
 This project also allows access to the API from any operating system, including Linux and Mac, by running the server in a Windows VM, or by running WSL.
