@@ -231,7 +231,7 @@ class Bbg:
             end=est
         )
         logger.info(f"Requesting historical data: {hreq}")
-        data = await self.stub.historicalDataRequest(hreq)
+        data = await self.stub.historicalDataRequest(hreq, metadata=[("cidname", self.cid.name)])
         return data
 
 
@@ -259,9 +259,21 @@ class Bbg:
                 ) for t in topics for f in fields   
             ]
         )
-        # Perform the asynchronous subscribe call
+        print(f"self cid name {self.cid.name}")
+        print(sub)
+        print("------------------------------")
         await self.stub.subscribe(sub, metadata=[("cidname", self.cid.name)])
         logger.info(f"Subscribed to topics: {sub}")
+
+    def ping(self):
+        return self.run_async(self.async_ping())
+
+    async def async_ping(self):
+        nowstamp = protoTimestamp()
+        nowstamp.GetCurrentTime()
+        Ping = bloomberg_pb2.Ping(cid=self.cid, timestamp=nowstamp)
+        pong = await self.stub.ping(Ping)
+        return pong
 
 
     def unsubscribe(self, topics):
@@ -287,8 +299,6 @@ class Bbg:
                 await stream.cancel()
             except Exception as e:
                 logger.error(f"Error in subscriptionsStream: {e}")
-            finally:
-                logger.info("subscriptionsStream ended.")
 
 
 
@@ -322,6 +332,9 @@ def syncmain():
         handler_class = Handler  # Optional handler class that will run in addition to defaul handler
     )
 
+    pong = bbg.ping()
+    print(pong)
+
     # Request historical data
     hist = bbg.historicalDataRequest(
         ["RNO FP Equity", "MSFT US Equity"],
@@ -332,7 +345,7 @@ def syncmain():
     print(hist)
 
     bbg.subscribe(["XBTUSD Curncy"])
-    IPython.embed
+    IPython.embed()
 
     return bbg
 

@@ -7,7 +7,8 @@ import logging
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-from colorama import Fore, Back, Style, init as colinit; colinit()
+
+from rich.console import Console; console = Console() 
 
 from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
         RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS)
@@ -17,9 +18,16 @@ class EventHandler(object):
     def __init__(self, parent):
         self.parent = parent
 
-    async def multisend(queues, msg):
+    def multisend(self, correlid, sendmsg):
+        queues = [x[1] for x in self.parent.correlators[correlid]] 
+        # print queues in orange
+        console.print(f"[orange]queues: {queues}[/orange]")
+        # now print correlid in blue
+        console.print(f"[blue]correlid: {correlid}[/blue]")
+        # now print sendmsg in purple
+        console.print(f"[purple]sendmsg: {sendmsg}[/purple]")
         for q in queues:
-            await q.put(msg)
+            self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
 
     def getTimeStamp(self):
         return time.strftime("%Y-%m-%d %H:%M:%S")
@@ -31,10 +39,8 @@ class EventHandler(object):
                         f"partial {partial}"))
             sendmsg = (RESP_REF, {"correlid": correlid, "partial": partial, "data": msg.toPy()})
             # now put message into correct asyncio queue. Ceremony here is because we're calling async from sync
-            breakpoint()
-            queue = list(self.parent.correlators[correlid])[0][1] # first and only element of set
-            self.parent.loop.call_soon_threadsafe(queue.put_nowait, sendmsg)
-            if not partial:
+            self.multisend(correlid, sendmsg)
+            if not partial:   # then we're done with this so deleate the correlator entry
                 del self.parent.correlators[correlid]
 
 
@@ -47,22 +53,16 @@ class EventHandler(object):
             correlid = msg.correlationId().value()
             if msg.messageType() == blpapi.Names.SUBSCRIPTION_FAILURE:
                 sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "validated": False})
-                idx = [x.name for x in self.parent.subscriptionList.topics].index(correlid)
-                self.parent.subscriptionList.topics[idx].validated = False
-                # TODO parent must send a status to the client on this
+                # TODO remove from correlators when failure
             elif msg.messageType() == blpapi.Names.SUBSCRIPTION_TERMINATED:
                 sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "terminated": True})
-                idx = [x.name for x in self.parent.subscriptionList.topics].index(correlid)
-                self.parent.subscriptionList.topics[idx].terminated = True
+                # TODO remove from correlators when failure
             elif msg.messageType() == blpapi.Names.SUBSCRIPTION_STARTED:
                 sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "validated": True})
-                idx = [x.name for x in self.parent.subscriptionList.topics].index(correlid)
-                self.parent.subscriptionList.topics[idx].validated = True
             else:
-                # unhandled message types
                 sendmsg = None
             if sendmsg:
-                self.parent.loop.call_soon_threadsafe(self.parent.subq.put_nowait, sendmsg)
+                self.multisend(correlid, sendmsg)
 
     def searchMsg(self, msg, fields):
         return [{"field": field, "value": msg[field]} 
@@ -110,9 +110,7 @@ class EventHandler(object):
                        "topic": correlid,
                        "prices": self.searchMsg(msg, DEFAULT_FIELDS)})
                 # now get all the queues that needs this message
-                queues = [x[1] for x in self.parent.correlators[correlid]] 
-                for q in queues:
-                    self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
+                self.multisend(correlid, sendmsg)
 
             # something else --->
             else:

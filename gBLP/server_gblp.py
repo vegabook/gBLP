@@ -37,6 +37,8 @@ from bloomberg_pb2 import KeyRequestId, KeyResponse
 from bloomberg_pb2 import HistoricalDataResponse
 from bloomberg_pb2 import SubscriptionList
 from bloomberg_pb2 import SubscriptionDataResponse
+from bloomberg_pb2 import Ping 
+from bloomberg_pb2 import Pong 
 from bloomberg_pb2 import Topic
 
 from bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
@@ -49,6 +51,7 @@ from responseParsers import (
 )
 
 from google.protobuf.struct_pb2 import Struct
+from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 
@@ -369,24 +372,25 @@ class SessionRunner(object):
             return self.grpcRepresentation()
         # split out the subscriptionList
         etl= [(t.name, t.type, t.interval, t.field) 
-            for t in self.subscriptionList.topics]
-        logger.info(f"Subscribing to {difftl}")
+            for t in subscriptionList.topics]
         bbgsublist = blpapi.SubscriptionList()
         for tname, ttype, tinterval, tfield in etl:
-            corrString = f"sub:{tname}:{ttype}:{tinterval}:{tfield}"
-            if not (tname, ttype, tinterval, tfield) in self.correlators:
+            corrString = f"sub:{tname}:{ttype}:{tinterval}:{tfield}" # make correlid
+            # now add this to be subscribed if necessary
+            if not corrString in self.correlators:
+                logger.info(f"Subscribing to {tname} {ttype} {tinterval} {tfield}")
                 topicTypeName = Topic.topicType.Name(ttype) # SEDOL1/TICKER/CUSIP etc
                 substring = f"{service}/{ttype}/{tname}"
-                intervalstr = f"interval={int(topic.interval)}"
+                intervalstr = f"interval={int(tinterval)}"
                 correlid = blpapi.CorrelationId(corrString)
-                bbgsublist.add(substring, topic.fields, intervalstr, correlid)
-                self.subscribed.add((tname, ttype, tinterval, tfield))
-            self.correlators[corrString].add((cid.name, subq))
+                bbgsublist.add(substring, tfield, intervalstr, correlid)
+            else:
+                logger.info(f"Already subscribed to {tname} {topicTypeName} {tinterval} {tfield}")
 
-            
+            # add this topic to the correlator with this queue
+            self.correlators[corrString].add((cid.name, subq)) 
 
-
-        # extend the subscription lisR
+        # subscribe to any securities that were not already subscribed 
         self.session.subscribe(bbgsublist)
         return True
 
@@ -412,17 +416,30 @@ class Bbg(BbgServicer):
     # and communicates with the SessionRunner(s)
 
     def __init__(self):
+        self.queues = dict()
         self.session = SessionRunner(options=globalOptions)
         self.grpc_rep = self.session.open()
-        self.queues = dict()
-
 
     async def closeSession(self):
         await self.session.close()
 
 
+    async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
+        cid = request.cid
+        cidname = cid.name
+        if not self.queues.get(cidname):
+            self.queues[cidname] = asyncio.Queue()
+        nowstamp = protoTimestamp()
+        nowstamp.GetCurrentTime()
+        pong = Pong(cid=cid, timestamp=nowstamp)
+        return pong
+
+
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
+        cidname = dict(context.invocation_metadata())["cidname"]
+        if not self.queues.get(cidname):
+            context.abort(grpc.StatusCode.NOT_FOUND, "Context not initialized")
         q = asyncio.Queue()
         messageList = []
         await self.session.historicalDataRequest(request, q)
@@ -441,6 +458,8 @@ class Bbg(BbgServicer):
     async def subscribe(self, subscriptionList: SubscriptionList, 
                         context: grpc.aio.ServicerContext) -> SubscriptionList:
         cidname = dict(context.invocation_metadata())["cidname"]
+        if not self.queues.get(cidname):
+            context.abort(grpc.StatusCode.NOT_FOUND, "Context not initialized")
         subq = self.queues[cidname]
         await self.session.subscribe(subscriptionList, subq)
 
@@ -453,8 +472,7 @@ class Bbg(BbgServicer):
 
     async def subscriptionStream(self, request, context: grpc.aio.ServicerContext): 
         cidname = dict(context.invocation_metadata())["cidname"]
-        subq = asyncio.Queue()
-        self.queues[cidname] = subq
+        subq = self.queues[cidname]
         while not done.is_set():
             # Get messages from the session's queue
             # async get from the queue

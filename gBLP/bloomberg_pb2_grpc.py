@@ -116,6 +116,16 @@ class BbgStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.ping = channel.unary_unary(
+                '/bloomberg.Bbg/ping',
+                request_serializer=bloomberg__pb2.Ping.SerializeToString,
+                response_deserializer=bloomberg__pb2.Pong.FromString,
+                _registered_method=True)
+        self.pong = channel.unary_unary(
+                '/bloomberg.Bbg/pong',
+                request_serializer=bloomberg__pb2.Pong.SerializeToString,
+                response_deserializer=bloomberg__pb2.Ping.FromString,
+                _registered_method=True)
         self.subscriptionStream = channel.unary_stream(
                 '/bloomberg.Bbg/subscriptionStream',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
@@ -141,6 +151,18 @@ class BbgStub(object):
 class BbgServicer(object):
     """Bloomberg API session management
     """
+
+    def ping(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def pong(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def subscriptionStream(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -169,6 +191,16 @@ class BbgServicer(object):
 
 def add_BbgServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'ping': grpc.unary_unary_rpc_method_handler(
+                    servicer.ping,
+                    request_deserializer=bloomberg__pb2.Ping.FromString,
+                    response_serializer=bloomberg__pb2.Pong.SerializeToString,
+            ),
+            'pong': grpc.unary_unary_rpc_method_handler(
+                    servicer.pong,
+                    request_deserializer=bloomberg__pb2.Pong.FromString,
+                    response_serializer=bloomberg__pb2.Ping.SerializeToString,
+            ),
             'subscriptionStream': grpc.unary_stream_rpc_method_handler(
                     servicer.subscriptionStream,
                     request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
@@ -200,6 +232,60 @@ def add_BbgServicer_to_server(servicer, server):
 class Bbg(object):
     """Bloomberg API session management
     """
+
+    @staticmethod
+    def ping(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bloomberg.Bbg/ping',
+            bloomberg__pb2.Ping.SerializeToString,
+            bloomberg__pb2.Pong.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def pong(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bloomberg.Bbg/pong',
+            bloomberg__pb2.Pong.SerializeToString,
+            bloomberg__pb2.Ping.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def subscriptionStream(request,
