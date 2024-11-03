@@ -20,12 +20,6 @@ class EventHandler(object):
 
     def multisend(self, correlid, sendmsg):
         queues = [x[1] for x in self.parent.correlators[correlid]] 
-        # print queues in orange
-        console.print(f"[orange]queues: {queues}[/orange]")
-        # now print correlid in blue
-        console.print(f"[blue]correlid: {correlid}[/blue]")
-        # now print sendmsg in purple
-        console.print(f"[purple]sendmsg: {sendmsg}[/purple]")
         for q in queues:
             self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
 

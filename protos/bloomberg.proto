@@ -48,7 +48,7 @@ message Topic {
     CUSIP = 3;
   }
   string name = 1;
-  topicType type = 2; 
+  topicType ttype = 2; 
   string field = 3;
   int32 interval = 4;
   bool validated = 5;

@@ -4,7 +4,6 @@ import grpc
 import warnings
 
 import bloomberg_pb2 as bloomberg__pb2
-from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 GRPC_GENERATED_VERSION = '1.65.1'
 GRPC_VERSION = grpc.__version__
@@ -128,7 +127,7 @@ class BbgStub(object):
                 _registered_method=True)
         self.subscriptionStream = channel.unary_stream(
                 '/bloomberg.Bbg/subscriptionStream',
-                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+                request_serializer=bloomberg__pb2.ClientID.SerializeToString,
                 response_deserializer=bloomberg__pb2.SubscriptionDataResponse.FromString,
                 _registered_method=True)
         self.subscribe = channel.unary_unary(
@@ -203,7 +202,7 @@ def add_BbgServicer_to_server(servicer, server):
             ),
             'subscriptionStream': grpc.unary_stream_rpc_method_handler(
                     servicer.subscriptionStream,
-                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                    request_deserializer=bloomberg__pb2.ClientID.FromString,
                     response_serializer=bloomberg__pb2.SubscriptionDataResponse.SerializeToString,
             ),
             'subscribe': grpc.unary_unary_rpc_method_handler(
@@ -302,7 +301,7 @@ class Bbg(object):
             request,
             target,
             '/bloomberg.Bbg/subscriptionStream',
-            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            bloomberg__pb2.ClientID.SerializeToString,
             bloomberg__pb2.SubscriptionDataResponse.FromString,
             options,
             channel_credentials,

@@ -35,11 +35,16 @@ from collections import deque, defaultdict
 import IPython
 from queue import Queue
 from rich.console import Console; console = Console()
-from rich.traceback import install; install()
+#from rich.traceback import install; install()
 from google.protobuf import empty_pb2
 
 from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
         RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS)
+
+TTYPETICKER = bloomberg_pb2.Topic.topicType.Value("TICKER")
+TTYPESEDOL = bloomberg_pb2.Topic.topicType.Value("SEDOL1")
+TTYPECUSIP = bloomberg_pb2.Topic.topicType.Value("CUSIP")
+
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -237,33 +242,37 @@ class Bbg:
 
     def subscribe(self, topics, 
                   fields=["LAST_PRICE"],
-                  type="TICKER",
+                  ttype=TTYPETICKER,
                   interval=2):
         """ synchronous subscribe method """
-        return self.run_async(
-            self.async_subscribe(topics, fields, type, interval)
-        )
+        return self.run_async(self.async_subscribe(topics, fields, ttype, interval))
 
     async def async_subscribe(self, topics, 
-                              fields=["LAST_PRICE"],
-                              type="TICKER",
-                              interval=2):
-        sub = bloomberg_pb2.SubscriptionList(
+                              fields,
+                              ttype,
+                              interval):
+        subs = bloomberg_pb2.SubscriptionList(
             cid=self.cid,
             topics=[
                 bloomberg_pb2.Topic(
                     name=t, 
                     field=f,
-                    type=type, 
+                    ttype=ttype, 
                     interval=interval
                 ) for t in topics for f in fields   
             ]
         )
-        print(f"self cid name {self.cid.name}")
-        print(sub)
-        print("------------------------------")
-        await self.stub.subscribe(sub, metadata=[("cidname", self.cid.name)])
-        logger.info(f"Subscribed to topics: {sub}")
+
+        try:
+            await self.stub.subscribe(subs, metadata=[("cidname", self.cid.name)])
+            logger.info(f"Subscribed to topics: {subs}")
+        except grpc.aio.AioRpcError as e:
+            logger.error(f"gRPC AioRpcError during subscribe: {e}")
+        except AttributeError as e:
+            logger.error(f"AttributeError during subscribe: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error during subscribe: {e}")
+        return subs
 
     def ping(self):
         return self.run_async(self.async_ping())
@@ -344,7 +353,8 @@ def syncmain():
     )
     print(hist)
 
-    bbg.subscribe(["XBTUSD Curncy"])
+    subs = bbg.subscribe(["XETUSD Curncy"], ["PX_BID", "PX_ASK"])
+    console.print(f"[bold pink]Subscribed to {subs}[/bold pink]")
     IPython.embed()
 
     return bbg

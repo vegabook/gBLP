@@ -371,28 +371,31 @@ class SessionRunner(object):
         if not success:
             return self.grpcRepresentation()
         # split out the subscriptionList
-        etl= [(t.name, t.type, t.interval, t.field) 
+        etl= [(t.name, t.ttype, t.interval, t.field) 
             for t in subscriptionList.topics]
         bbgsublist = blpapi.SubscriptionList()
-        for tname, ttype, tinterval, tfield in etl:
-            corrString = f"sub:{tname}:{ttype}:{tinterval}:{tfield}" # make correlid
+        subscribeRequests = SubscriptionList(cid=cid)
+        for t in subscriptionList.topics:
+            topicTypeName = Topic.topicType.Name(t.ttype) # SEDOL1/TICKER/CUSIP etc
+            corrString = f"sub:{t.name}:{topicTypeName}:{t.interval}:{t.field}" # make correlid
             # now add this to be subscribed if necessary
             if not corrString in self.correlators:
-                logger.info(f"Subscribing to {tname} {ttype} {tinterval} {tfield}")
-                topicTypeName = Topic.topicType.Name(ttype) # SEDOL1/TICKER/CUSIP etc
-                substring = f"{service}/{ttype}/{tname}"
-                intervalstr = f"interval={int(tinterval)}"
+                logger.info(f"Subscribing to {t.name} {t.ttype} {t.interval} {t.field}")
+                substring = f"{service}/{topicTypeName}/{t.name}"
+                intervalstr = f"interval={int(t.interval)}"
                 correlid = blpapi.CorrelationId(corrString)
-                bbgsublist.add(substring, tfield, intervalstr, correlid)
+                bbgsublist.add(substring, t.field, intervalstr, correlid)
+                subscribeRequests.topics.append(t)
             else:
-                logger.info(f"Already subscribed to {tname} {topicTypeName} {tinterval} {tfield}")
+                logger.info(f"Already subscribed to {t.name} {topicTypeName} {t.interval} {t.field}")
 
             # add this topic to the correlator with this queue
             self.correlators[corrString].add((cid.name, subq)) 
 
         # subscribe to any securities that were not already subscribed 
-        self.session.subscribe(bbgsublist)
-        return True
+        if bbgsublist.size():
+            self.session.subscribe(bbgsublist)
+        return subscribeRequests
 
 
     async def unsubscribe(self, subscriptionList: SubscriptionList):
@@ -456,12 +459,13 @@ class Bbg(BbgServicer):
 
 
     async def subscribe(self, subscriptionList: SubscriptionList, 
-                        context: grpc.aio.ServicerContext) -> SubscriptionList:
+                        context: grpc.aio.ServicerContext):
         cidname = dict(context.invocation_metadata())["cidname"]
         if not self.queues.get(cidname):
             context.abort(grpc.StatusCode.NOT_FOUND, "Context not initialized")
         subq = self.queues[cidname]
-        await self.session.subscribe(subscriptionList, subq)
+        subscribeRequests = await self.session.subscribe(subscriptionList, subq)
+        return subscribeRequests
 
 
     async def unsubscribe(self, 
@@ -479,6 +483,8 @@ class Bbg(BbgServicer):
             try:
                 msg = await subq.get() 
             except asyncio.CancelledError:
+                for x in range(50):
+                    print(f"----------------------------- CANCELLED {cidname} ---------------------------------")
                 break
             response = buildSubscriptionDataResponse(msg)
             yield response
