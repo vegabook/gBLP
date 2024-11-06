@@ -14,57 +14,68 @@ _sym_db = _symbol_database.Default()
 
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
-from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from google.protobuf import any_pb2 as google_dot_protobuf_dot_any__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x62loomberg.proto\x12\tbloomberg\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x19google/protobuf/any.proto\"\x18\n\x08\x43lientID\x12\x0c\n\x04name\x18\x01 \x01(\t\"\xc5\x01\n\x05Topic\x12\x0c\n\x04name\x18\x01 \x01(\t\x12)\n\x05ttype\x18\x02 \x01(\x0e\x32\x1a.bloomberg.Topic.topicType\x12\r\n\x05\x66ield\x18\x03 \x01(\t\x12\x10\n\x08interval\x18\x04 \x01(\x05\x12\x11\n\tvalidated\x18\x05 \x01(\x08\x12\x12\n\nterminated\x18\x06 \x01(\x08\";\n\ttopicType\x12\x0b\n\x07UNKNOWN\x10\x00\x12\n\n\x06TICKER\x10\x01\x12\n\n\x06SEDOL1\x10\x02\x12\t\n\x05\x43USIP\x10\x03\"V\n\x10SubscriptionList\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12 \n\x06topics\x18\x02 \x03(\x0b\x32\x10.bloomberg.Topic\"\xb9\x01\n\x18SubscriptionDataResponse\x12\x0f\n\x07msgtype\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x06\x66ields\x18\x04 \x03(\x0b\x32\x17.bloomberg.SubFieldData\x12\x11\n\tvalidated\x18\x05 \x01(\x08\x12\x12\n\nterminated\x18\x06 \x01(\x08\"D\n\x0cSubFieldData\x12\r\n\x05\x66ield\x18\x01 \x01(\t\x12%\n\x05value\x18\x02 \x01(\x0b\x32\x16.google.protobuf.Value\"\x9d\x02\n\x15HistoricalDataRequest\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12\x0e\n\x06topics\x18\x02 \x03(\t\x12\x0e\n\x06\x66ields\x18\x03 \x03(\t\x12)\n\x05start\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12>\n\x07options\x18\x06 \x03(\x0b\x32-.bloomberg.HistoricalDataRequest.OptionsEntry\x1a.\n\x0cOptionsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"N\n\x16HistoricalDataResponse\x12\x34\n\x05items\x18\x01 \x03(\x0b\x32%.bloomberg.HistoricalDataResponseItem\"L\n\x1aHistoricalDataResponseItem\x12.\n\rsecurity_data\x18\x01 \x01(\x0b\x32\x17.bloomberg.SecurityData\"\xbb\x01\n\x0cSecurityData\x12\x10\n\x08security\x18\x01 \x01(\t\x12&\n\x08\x65id_data\x18\x02 \x03(\x0b\x32\x14.google.protobuf.Any\x12\x17\n\x0fsequence_number\x18\x03 \x01(\x05\x12.\n\x10\x66ield_exceptions\x18\x04 \x03(\x0b\x32\x14.google.protobuf.Any\x12(\n\nfield_data\x18\x05 \x03(\x0b\x32\x14.bloomberg.FieldData\"\xae\x01\n\tFieldData\x12(\n\x04\x64\x61te\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x06\x66ields\x18\x02 \x03(\x0b\x32 .bloomberg.FieldData.FieldsEntry\x1a\x45\n\x0b\x46ieldsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12%\n\x05value\x18\x02 \x01(\x0b\x32\x16.google.protobuf.Value:\x02\x38\x01\"\x1a\n\x0cKeyRequestId\x12\n\n\x02id\x18\x01 \x01(\t\"8\n\x0bKeyResponse\x12\x0b\n\x03key\x18\x01 \x01(\x0c\x12\x0c\n\x04\x63\x65rt\x18\x02 \x01(\x0c\x12\x0e\n\x06\x63\x61\x63\x65rt\x18\x03 \x01(\x0c\"W\n\x04Ping\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"W\n\x04Pong\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp2M\n\nKeyManager\x12?\n\nrequestKey\x12\x17.bloomberg.KeyRequestId\x1a\x16.bloomberg.KeyResponse\"\x00\x32\xa5\x03\n\x03\x42\x62g\x12*\n\x04ping\x12\x0f.bloomberg.Ping\x1a\x0f.bloomberg.Pong\"\x00\x12*\n\x04pong\x12\x0f.bloomberg.Pong\x1a\x0f.bloomberg.Ping\"\x00\x12R\n\x12subscriptionStream\x12\x13.bloomberg.ClientID\x1a#.bloomberg.SubscriptionDataResponse\"\x00\x30\x01\x12G\n\tsubscribe\x12\x1b.bloomberg.SubscriptionList\x1a\x1b.bloomberg.SubscriptionList\"\x00\x12I\n\x0bunsubscribe\x12\x1b.bloomberg.SubscriptionList\x1a\x1b.bloomberg.SubscriptionList\"\x00\x12^\n\x15historicalDataRequest\x12 .bloomberg.HistoricalDataRequest\x1a!.bloomberg.HistoricalDataResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x62loomberg.proto\x12\tbloomberg\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x19google/protobuf/any.proto\"\x18\n\x08\x43lientID\x12\x0c\n\x04name\x18\x01 \x01(\t\"\xc5\x01\n\x05Topic\x12\x0c\n\x04name\x18\x01 \x01(\t\x12)\n\x05ttype\x18\x02 \x01(\x0e\x32\x1a.bloomberg.Topic.topicType\x12\r\n\x05\x66ield\x18\x03 \x01(\t\x12\x10\n\x08interval\x18\x04 \x01(\x05\x12\x11\n\tvalidated\x18\x05 \x01(\x08\x12\x12\n\nterminated\x18\x06 \x01(\x08\";\n\ttopicType\x12\x0b\n\x07UNKNOWN\x10\x00\x12\n\n\x06TICKER\x10\x01\x12\n\n\x06SEDOL1\x10\x02\x12\t\n\x05\x43USIP\x10\x03\"V\n\x10SubscriptionList\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12 \n\x06topics\x18\x02 \x03(\x0b\x32\x10.bloomberg.Topic\"\xb9\x01\n\x18SubscriptionDataResponse\x12\x0f\n\x07msgtype\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x06\x66ields\x18\x04 \x03(\x0b\x32\x17.bloomberg.SubFieldData\x12\x11\n\tvalidated\x18\x05 \x01(\x08\x12\x12\n\nterminated\x18\x06 \x01(\x08\"D\n\x0cSubFieldData\x12\r\n\x05\x66ield\x18\x01 \x01(\t\x12%\n\x05value\x18\x02 \x01(\x0b\x32\x16.google.protobuf.Value\"\x98\x02\n\x12IntradayBarRequest\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12\r\n\x05topic\x18\x02 \x01(\t\x12)\n\x05start\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x10\n\x08interval\x18\x05 \x01(\x05\x12;\n\x07options\x18\x06 \x03(\x0b\x32*.bloomberg.IntradayBarRequest.OptionsEntry\x1a.\n\x0cOptionsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"u\n\x13IntradayBarResponse\x12+\n\rresponseError\x18\x01 \x01(\x0b\x32\x14.google.protobuf.Any\x12\x31\n\x05items\x18\x02 \x03(\x0b\x32\".bloomberg.IntradayBarResponseItem\"C\n\x17IntradayBarResponseItem\x12(\n\x04\x62\x61rs\x18\x02 \x03(\x0b\x32\x1a.bloomberg.IntradayBarData\"\xa5\x01\n\x0fIntradayBarData\x12\x0c\n\x04open\x18\x01 \x01(\x02\x12\x0c\n\x04high\x18\x02 \x01(\x02\x12\x0b\n\x03low\x18\x03 \x01(\x02\x12\r\n\x05\x63lose\x18\x04 \x01(\x02\x12\x0e\n\x06volume\x18\x05 \x01(\x05\x12\x11\n\tnumEvents\x18\x06 \x01(\x05\x12\r\n\x05value\x18\x07 \x01(\x02\x12(\n\x04time\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x9d\x02\n\x15HistoricalDataRequest\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12\x0e\n\x06topics\x18\x02 \x03(\t\x12\x0e\n\x06\x66ields\x18\x03 \x03(\t\x12)\n\x05start\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12>\n\x07options\x18\x06 \x03(\x0b\x32-.bloomberg.HistoricalDataRequest.OptionsEntry\x1a.\n\x0cOptionsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"{\n\x16HistoricalDataResponse\x12+\n\rresponseError\x18\x01 \x01(\x0b\x32\x14.google.protobuf.Any\x12\x34\n\x05items\x18\x02 \x03(\x0b\x32%.bloomberg.HistoricalDataResponseItem\"L\n\x1aHistoricalDataResponseItem\x12.\n\rsecurity_data\x18\x01 \x01(\x0b\x32\x17.bloomberg.SecurityData\"\xe8\x01\n\x0cSecurityData\x12+\n\rsecurityError\x18\x01 \x01(\x0b\x32\x14.google.protobuf.Any\x12\x10\n\x08security\x18\x02 \x01(\t\x12&\n\x08\x65id_data\x18\x03 \x03(\x0b\x32\x14.google.protobuf.Any\x12\x17\n\x0fsequence_number\x18\x04 \x01(\x05\x12.\n\x10\x66ield_exceptions\x18\x05 \x03(\x0b\x32\x14.google.protobuf.Any\x12(\n\nfield_data\x18\x06 \x03(\x0b\x32\x14.bloomberg.FieldData\"\xae\x01\n\tFieldData\x12(\n\x04\x64\x61te\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x06\x66ields\x18\x02 \x03(\x0b\x32 .bloomberg.FieldData.FieldsEntry\x1a\x45\n\x0b\x46ieldsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12%\n\x05value\x18\x02 \x01(\x0b\x32\x16.google.protobuf.Value:\x02\x38\x01\"\x1a\n\x0cKeyRequestId\x12\n\n\x02id\x18\x01 \x01(\t\"8\n\x0bKeyResponse\x12\x0b\n\x03key\x18\x01 \x01(\x0c\x12\x0c\n\x04\x63\x65rt\x18\x02 \x01(\x0c\x12\x0e\n\x06\x63\x61\x63\x65rt\x18\x03 \x01(\x0c\"W\n\x04Ping\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"W\n\x04Pong\x12 \n\x03\x63id\x18\x01 \x01(\x0b\x32\x13.bloomberg.ClientID\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp2M\n\nKeyManager\x12?\n\nrequestKey\x12\x17.bloomberg.KeyRequestId\x1a\x16.bloomberg.KeyResponse\"\x00\x32\xc4\x04\n\x03\x42\x62g\x12*\n\x04ping\x12\x0f.bloomberg.Ping\x1a\x0f.bloomberg.Pong\"\x00\x12*\n\x04pong\x12\x0f.bloomberg.Pong\x1a\x0f.bloomberg.Ping\"\x00\x12R\n\x12subscriptionStream\x12\x13.bloomberg.ClientID\x1a#.bloomberg.SubscriptionDataResponse\"\x00\x30\x01\x12G\n\tsubscribe\x12\x1b.bloomberg.SubscriptionList\x1a\x1b.bloomberg.SubscriptionList\"\x00\x12I\n\x0bunsubscribe\x12\x1b.bloomberg.SubscriptionList\x1a\x1b.bloomberg.SubscriptionList\"\x00\x12\x46\n\x10subscriptionInfo\x12\x13.bloomberg.ClientID\x1a\x1b.bloomberg.SubscriptionList\"\x00\x12^\n\x15historicalDataRequest\x12 .bloomberg.HistoricalDataRequest\x1a!.bloomberg.HistoricalDataResponse\"\x00\x12U\n\x12intradayBarRequest\x12\x1d.bloomberg.IntradayBarRequest\x1a\x1e.bloomberg.IntradayBarResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'bloomberg_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_INTRADAYBARREQUEST_OPTIONSENTRY']._loaded_options = None
+  _globals['_INTRADAYBARREQUEST_OPTIONSENTRY']._serialized_options = b'8\001'
   _globals['_HISTORICALDATAREQUEST_OPTIONSENTRY']._loaded_options = None
   _globals['_HISTORICALDATAREQUEST_OPTIONSENTRY']._serialized_options = b'8\001'
   _globals['_FIELDDATA_FIELDSENTRY']._loaded_options = None
   _globals['_FIELDDATA_FIELDSENTRY']._serialized_options = b'8\001'
-  _globals['_CLIENTID']._serialized_start=149
-  _globals['_CLIENTID']._serialized_end=173
-  _globals['_TOPIC']._serialized_start=176
-  _globals['_TOPIC']._serialized_end=373
-  _globals['_TOPIC_TOPICTYPE']._serialized_start=314
-  _globals['_TOPIC_TOPICTYPE']._serialized_end=373
-  _globals['_SUBSCRIPTIONLIST']._serialized_start=375
-  _globals['_SUBSCRIPTIONLIST']._serialized_end=461
-  _globals['_SUBSCRIPTIONDATARESPONSE']._serialized_start=464
-  _globals['_SUBSCRIPTIONDATARESPONSE']._serialized_end=649
-  _globals['_SUBFIELDDATA']._serialized_start=651
-  _globals['_SUBFIELDDATA']._serialized_end=719
-  _globals['_HISTORICALDATAREQUEST']._serialized_start=722
-  _globals['_HISTORICALDATAREQUEST']._serialized_end=1007
-  _globals['_HISTORICALDATAREQUEST_OPTIONSENTRY']._serialized_start=961
-  _globals['_HISTORICALDATAREQUEST_OPTIONSENTRY']._serialized_end=1007
-  _globals['_HISTORICALDATARESPONSE']._serialized_start=1009
-  _globals['_HISTORICALDATARESPONSE']._serialized_end=1087
-  _globals['_HISTORICALDATARESPONSEITEM']._serialized_start=1089
-  _globals['_HISTORICALDATARESPONSEITEM']._serialized_end=1165
-  _globals['_SECURITYDATA']._serialized_start=1168
-  _globals['_SECURITYDATA']._serialized_end=1355
-  _globals['_FIELDDATA']._serialized_start=1358
-  _globals['_FIELDDATA']._serialized_end=1532
-  _globals['_FIELDDATA_FIELDSENTRY']._serialized_start=1463
-  _globals['_FIELDDATA_FIELDSENTRY']._serialized_end=1532
-  _globals['_KEYREQUESTID']._serialized_start=1534
-  _globals['_KEYREQUESTID']._serialized_end=1560
-  _globals['_KEYRESPONSE']._serialized_start=1562
-  _globals['_KEYRESPONSE']._serialized_end=1618
-  _globals['_PING']._serialized_start=1620
-  _globals['_PING']._serialized_end=1707
-  _globals['_PONG']._serialized_start=1709
-  _globals['_PONG']._serialized_end=1796
-  _globals['_KEYMANAGER']._serialized_start=1798
-  _globals['_KEYMANAGER']._serialized_end=1875
-  _globals['_BBG']._serialized_start=1878
-  _globals['_BBG']._serialized_end=2299
+  _globals['_CLIENTID']._serialized_start=120
+  _globals['_CLIENTID']._serialized_end=144
+  _globals['_TOPIC']._serialized_start=147
+  _globals['_TOPIC']._serialized_end=344
+  _globals['_TOPIC_TOPICTYPE']._serialized_start=285
+  _globals['_TOPIC_TOPICTYPE']._serialized_end=344
+  _globals['_SUBSCRIPTIONLIST']._serialized_start=346
+  _globals['_SUBSCRIPTIONLIST']._serialized_end=432
+  _globals['_SUBSCRIPTIONDATARESPONSE']._serialized_start=435
+  _globals['_SUBSCRIPTIONDATARESPONSE']._serialized_end=620
+  _globals['_SUBFIELDDATA']._serialized_start=622
+  _globals['_SUBFIELDDATA']._serialized_end=690
+  _globals['_INTRADAYBARREQUEST']._serialized_start=693
+  _globals['_INTRADAYBARREQUEST']._serialized_end=973
+  _globals['_INTRADAYBARREQUEST_OPTIONSENTRY']._serialized_start=927
+  _globals['_INTRADAYBARREQUEST_OPTIONSENTRY']._serialized_end=973
+  _globals['_INTRADAYBARRESPONSE']._serialized_start=975
+  _globals['_INTRADAYBARRESPONSE']._serialized_end=1092
+  _globals['_INTRADAYBARRESPONSEITEM']._serialized_start=1094
+  _globals['_INTRADAYBARRESPONSEITEM']._serialized_end=1161
+  _globals['_INTRADAYBARDATA']._serialized_start=1164
+  _globals['_INTRADAYBARDATA']._serialized_end=1329
+  _globals['_HISTORICALDATAREQUEST']._serialized_start=1332
+  _globals['_HISTORICALDATAREQUEST']._serialized_end=1617
+  _globals['_HISTORICALDATAREQUEST_OPTIONSENTRY']._serialized_start=927
+  _globals['_HISTORICALDATAREQUEST_OPTIONSENTRY']._serialized_end=973
+  _globals['_HISTORICALDATARESPONSE']._serialized_start=1619
+  _globals['_HISTORICALDATARESPONSE']._serialized_end=1742
+  _globals['_HISTORICALDATARESPONSEITEM']._serialized_start=1744
+  _globals['_HISTORICALDATARESPONSEITEM']._serialized_end=1820
+  _globals['_SECURITYDATA']._serialized_start=1823
+  _globals['_SECURITYDATA']._serialized_end=2055
+  _globals['_FIELDDATA']._serialized_start=2058
+  _globals['_FIELDDATA']._serialized_end=2232
+  _globals['_FIELDDATA_FIELDSENTRY']._serialized_start=2163
+  _globals['_FIELDDATA_FIELDSENTRY']._serialized_end=2232
+  _globals['_KEYREQUESTID']._serialized_start=2234
+  _globals['_KEYREQUESTID']._serialized_end=2260
+  _globals['_KEYRESPONSE']._serialized_start=2262
+  _globals['_KEYRESPONSE']._serialized_end=2318
+  _globals['_PING']._serialized_start=2320
+  _globals['_PING']._serialized_end=2407
+  _globals['_PONG']._serialized_start=2409
+  _globals['_PONG']._serialized_end=2496
+  _globals['_KEYMANAGER']._serialized_start=2498
+  _globals['_KEYMANAGER']._serialized_end=2575
+  _globals['_BBG']._serialized_start=2578
+  _globals['_BBG']._serialized_end=3158
 # @@protoc_insertion_point(module_scope)

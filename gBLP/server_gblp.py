@@ -32,9 +32,11 @@ import traceback
 
 import grpc
 from bloomberg_pb2 import ClientID
-from bloomberg_pb2 import HistoricalDataRequest 
 from bloomberg_pb2 import KeyRequestId, KeyResponse
+from bloomberg_pb2 import HistoricalDataRequest 
 from bloomberg_pb2 import HistoricalDataResponse
+from bloomberg_pb2 import IntradayBarRequest
+from bloomberg_pb2 import IntradayBarResponse
 from bloomberg_pb2 import SubscriptionList
 from bloomberg_pb2 import SubscriptionDataResponse
 from bloomberg_pb2 import Ping 
@@ -343,14 +345,14 @@ class SessionRunner(object):
         logger.info(f"Requesting historical data {request}")
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
-            return False
+            return []
         logger.info(f"setting securities {request.topics}")
         dtstart = request.start.ToDatetime().strftime("%Y%m%d")
         dtend = request.end.ToDatetime().strftime("%Y%m%d")
         requestDict = {"securities": request.topics,
                        "fields": request.fields,
                        "startDate": dtstart,
-                       "endDate": dtend}
+                       "endDate": dtend} # TODO OVERRIDES
         bbgRequest.fromPy(requestDict)
         # create a random 32-character string as the correlationId
         corrString = f"hist:{cid.name}:{makeName(alphaLength = 32, digitLength = 0)}"
@@ -358,6 +360,32 @@ class SessionRunner(object):
         # queue for this request, with correlator so event handler can match it
         self.correlators[corrString].add((cid.name, q))
         self.session.sendRequest(bbgRequest, correlationId=correlid)
+
+
+    async def intradayBarRequest(self, request: IntradayBarRequest, q: asyncio.Queue) -> IntradayBarResponse:
+        """ request intraday bar data """
+        cid = request.cid
+        logger.info(f"Requesting intraday bar data {request}")
+        success, bbgRequest = self._createEmptyRequest("IntradayBarRequest")
+        if not success:
+            return []
+        logger.info(f"setting security {request.topic}")
+        dtstart = request.start.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
+        dtend = request.end.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
+        requestDict = {"security": request.topic,
+                       "eventType": "TRADE",
+                       "startDateTime": dtstart,
+                       "endDateTime": dtend,
+                       "gapFillInitialBar": "true",
+                       "interval": request.interval} # TODO OVERRIDES
+        bbgRequest.fromPy(requestDict)
+        # create a random 32-character string as the correlationId
+        corrString = f"bar:{cid.name}:{makeName(alphaLength = 32, digitLength = 0)}"
+        correlid = blpapi.CorrelationId(corrString)
+        # queue for this request, with correlator so event handler can match it
+        self.correlators[corrString].add((cid.name, q))
+        self.session.sendRequest(bbgRequest, correlationId=correlid)
+
 
 
     # ------------ subscriptions -------------------
@@ -369,38 +397,58 @@ class SessionRunner(object):
         cid = subscriptionList.cid
         success, service = self._getService("Subscribe")
         if not success:
-            return self.grpcRepresentation()
+            return SubscriptionList(cid=cid, topics=[]) # empty
         # split out the subscriptionList
         etl= [(t.name, t.ttype, t.interval, t.field) 
             for t in subscriptionList.topics]
         bbgsublist = blpapi.SubscriptionList()
-        subscribeRequests = SubscriptionList(cid=cid)
+        newRequests = SubscriptionList(cid=cid) # empty at first
+        existRequests = SubscriptionList(cid=cid) # empty at first
         for t in subscriptionList.topics:
             topicTypeName = Topic.topicType.Name(t.ttype) # SEDOL1/TICKER/CUSIP etc
             corrString = f"sub:{t.name}:{topicTypeName}:{t.interval}:{t.field}" # make correlid
             # now add this to be subscribed if necessary
-            if not corrString in self.correlators:
+            if not corrString in self.correlators:    # not already subscribed 
                 logger.info(f"Subscribing to {t.name} {t.ttype} {t.interval} {t.field}")
                 substring = f"{service}/{topicTypeName}/{t.name}"
                 intervalstr = f"interval={int(t.interval)}"
                 correlid = blpapi.CorrelationId(corrString)
                 bbgsublist.add(substring, t.field, intervalstr, correlid)
-                subscribeRequests.topics.append(t)
+                newRequests.topics.append(t)
             else:
+                existRequests.topics.append(t)
                 logger.info(f"Already subscribed to {t.name} {topicTypeName} {t.interval} {t.field}")
 
             # add this topic to the correlator with this queue
-            self.correlators[corrString].add((cid.name, subq)) 
+            self.correlators[corrString].add((cid.name, subq))
 
         # subscribe to any securities that were not already subscribed 
         if bbgsublist.size():
             self.session.subscribe(bbgsublist)
-        return subscribeRequests
+        return newRequests
 
 
     async def unsubscribe(self, subscriptionList: SubscriptionList):
         """ unsubscribe from a list of topics """
         print(f"unsubcribing TODO")
+
+
+    async def subscriptionInfo(self, cidname):
+        """ list all subscriptions """
+        logger.info(f"Getting subscription info for {cidname}")
+        correls = []
+        for k, v in self.correlators.items():
+            for cidn, _ in v:
+                if cidn == cidname:
+                    correls.append(k)
+        subinfolist = SubscriptionList(cid=ClientID(name=cidname))
+        for c in correls:
+            parts = c.split(":")
+            subinfolist.topics.append(Topic(name=parts[1], 
+                                            ttype=Topic.topicType.Value(parts[2]), 
+                                            interval=int(parts[3]), 
+                                            field=parts[4]))
+        return subinfolist
 
 
     async def _sendInfo(self, command, bbgRequest):
@@ -458,6 +506,27 @@ class Bbg(BbgServicer):
             context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
+    async def intradayBarRequest(self, request: IntradayBarRequest,
+                                  context: grpc.aio.ServicerContext) -> IntradayBarResponse:
+        cidname = dict(context.invocation_metadata())["cidname"]
+        if not self.queues.get(cidname):
+            context.abort(grpc.StatusCode.NOT_FOUND, "Context not initialized")
+        q = asyncio.Queue()
+        messageList = []
+        await self.session.intradayBarRequest(request, q)
+        while True:
+            msg = await q.get()
+            messageList.append(msg[1]["data"])
+            if not msg[1]["partial"]:
+                break
+        if messageList:
+            print(messageList)
+            breakpoint()
+        else:
+            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+
+
+
     async def subscribe(self, subscriptionList: SubscriptionList, 
                         context: grpc.aio.ServicerContext):
         cidname = dict(context.invocation_metadata())["cidname"]
@@ -489,6 +558,12 @@ class Bbg(BbgServicer):
             response = buildSubscriptionDataResponse(msg)
             yield response
         logger.info("Subscription stream closed")
+
+
+    async def subscriptionInfo(self, cid, context: grpc.aio.ServicerContext):
+        cidname = cid.name
+        info = await self.session.subscriptionInfo(cidname)
+        return info
 
 
     async def close(self):

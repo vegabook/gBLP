@@ -7,9 +7,9 @@ package bloomberg;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
-import "google/protobuf/empty.proto";
 import "google/protobuf/any.proto";
 //import "google/protobuf/wrappers.proto";
+//import "google/protobuf/empty.proto";
 
 // Key management
 service KeyManager {
@@ -23,9 +23,10 @@ service Bbg {
   rpc subscriptionStream(ClientID) returns (stream SubscriptionDataResponse) {} 
   rpc subscribe(SubscriptionList) returns (SubscriptionList) {}
   rpc unsubscribe(SubscriptionList) returns (SubscriptionList) {}
+  rpc subscriptionInfo(ClientID) returns (SubscriptionList) {}
   rpc historicalDataRequest (HistoricalDataRequest) returns (HistoricalDataResponse) {}
   //rpc intradayTickRequest. maybe "tick" or "gblpTick"
-  //rpc intradayBarRequest maybe "bar"
+  rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
   //rpc historicalDataRequest "daily"
   //rpc referenceDataRequest "ref"
 }
@@ -75,6 +76,36 @@ message SubFieldData {
   google.protobuf.Value value = 2;
 }
 
+/////////////// IntradayBar data //////////////////
+
+message IntradayBarRequest {
+  ClientID cid = 1;
+  string topic = 2; // securities
+  google.protobuf.Timestamp start = 3; // startDate
+  google.protobuf.Timestamp end = 4; // endDate
+  int32 interval = 5; // interval in minutes
+  map <string, string> options = 6; // overrides
+}	
+
+message IntradayBarResponse {
+  google.protobuf.Any responseError = 1;
+  repeated IntradayBarResponseItem items = 2;
+}
+
+message IntradayBarResponseItem {
+  repeated IntradayBarData bars = 2;
+}
+
+message IntradayBarData {	
+  float open = 1;
+  float high = 2;
+  float low = 3;
+  float close = 4;
+  int32 volume = 5;
+  int32 numEvents = 6;
+  float value = 7;
+  google.protobuf.Timestamp time = 8;
+}
 
 
 /////////////// Historical data //////////////////
@@ -92,7 +123,8 @@ message HistoricalDataRequest {
 // The top-level response message
 message HistoricalDataResponse {
     // An array of items, each containing security data
-    repeated HistoricalDataResponseItem items = 1;
+    google.protobuf.Any responseError = 1;
+    repeated HistoricalDataResponseItem items = 2;
 }
 
 // Each item contains security data
@@ -102,11 +134,12 @@ message HistoricalDataResponseItem {
 
 // Security data for a security
 message SecurityData {
-    string security = 1; // Required
-    repeated google.protobuf.Any eid_data = 2; // Required; items unspecified
-    int32 sequence_number = 3; // Required
-    repeated google.protobuf.Any field_exceptions = 4; // Required; items unspecified
-    repeated FieldData field_data = 5; // Required
+    google.protobuf.Any securityError = 1;
+    string security = 2; // Required
+    repeated google.protobuf.Any eid_data = 3; // Required; items unspecified
+    int32 sequence_number = 4; // Required
+    repeated google.protobuf.Any field_exceptions = 5; // Required; items unspecified
+    repeated FieldData field_data = 6; // Required
 }
 
 // Field data for a date

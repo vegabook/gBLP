@@ -220,10 +220,11 @@ class Bbg:
                               topics, 
                               fields = ["LAST_PRICE"], 
                               start = dt.datetime.today() - dt.timedelta(days=365),
-                              end = dt.datetime.today()):
-        return self.run_async(self.async_historicalDataRequest(topics, fields, start, end))
+                              end = dt.datetime.today(), 
+                              options = None):
+        return self.run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
 
-    async def async_historicalDataRequest(self, topics, fields, start, end):
+    async def async_historicalDataRequest(self, topics, fields, start, end, options):
         sst = protoTimestamp()
         sst.FromDatetime(start)
         est = protoTimestamp()
@@ -238,6 +239,31 @@ class Bbg:
         logger.info(f"Requesting historical data: {hreq}")
         data = await self.stub.historicalDataRequest(hreq, metadata=[("cidname", self.cid.name)])
         return data
+
+    def intradayBarRequest(self, topic,
+                           start = dt.datetime.now() - dt.timedelta(days=3),
+                           end = dt.datetime.now(),
+                           interval = 1, 
+                           options = None):
+        return self.run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
+
+    async def async_intradayBarRequest(self, topic, start, end, interval, options):
+        sst = protoTimestamp()
+        sst.FromDatetime(start)
+        est = protoTimestamp()
+        est.FromDatetime(end)
+        bareq = bloomberg_pb2.IntradayBarRequest(
+            cid=self.cid,
+            topic=topic,
+            start=sst,
+            end=est,
+            interval=interval
+        )
+        logger.info(f"Requesting intraday bars: {bareq}")
+        data = await self.stub.intradayBarRequest(bareq, metadata=[("cidname", self.cid.name)])
+        return data
+
+                        
 
 
     def subscribe(self, topics, 
@@ -274,6 +300,7 @@ class Bbg:
             logger.error(f"Unexpected error during subscribe: {e}")
         return subs
 
+
     def ping(self):
         return self.run_async(self.async_ping())
 
@@ -287,6 +314,16 @@ class Bbg:
 
     def unsubscribe(self, topics):
         pass
+
+
+    def subscriptionInfo(self):
+        return self.run_async(self.aysnc_subscriptionInfo())
+
+    async def aysnc_subscriptionInfo(self):
+        return await self.stub.subscriptionInfo(self.cid)
+
+    
+    
 
     async def subscriptionsStream(self, stream):
         async for response in stream:
@@ -346,12 +383,21 @@ def syncmain():
 
     # Request historical data
     hist = bbg.historicalDataRequest(
-        ["RNO FP Equity", "MSFT US Equity"],
+        ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
         ["PX_LAST", "CUR_MKT_CAP"],
         dt.datetime(2023, 11, 28),
         dt.datetime(2023, 11, 30)
     )
     print(hist)
+
+    # Request intraday bars
+    intra = bbg.intradayBarRequest(topic = "USDZAR Curncy",
+        start = dt.datetime(2024, 10, 28, 6, 0),
+        end = dt.datetime.now(),
+        interval = 1
+    )
+
+    print(intra)
 
     subs = bbg.subscribe(["XETUSD Curncy"], ["PX_BID", "PX_ASK"])
     console.print(f"[bold pink]Subscribed to {subs}[/bold pink]")

@@ -1,9 +1,12 @@
-# colorscheme greenvision dark
+# colorscheme cobalt dark
 from bloomberg_pb2 import (
     HistoricalDataResponse,
     HistoricalDataResponseItem,
     SecurityData,
     FieldData
+    IntraDayBarResponse,
+    IntraDayBarResponseItem,
+    IntraDayBarData
 )
 
 from bloomberg_pb2 import (
@@ -21,18 +24,60 @@ import datetime
 import logging
 logger = logging.getLogger(__name__)
 
+intraDayBarResponse_format = [
+    {"responseError": 
+        {"source": string, 
+         "code": string, 
+         "category": string,
+         "message": string,
+         "subCategory": string},
+        "barData": {"barTickData: [
+            {"open": float, 
+             "high": float, 
+             "low": float, 
+             "close": float, 
+             "volume": int, 
+             "numEvents": int, 
+             "value": float,
+             "time": datetime.datetime}
+        ]}
+    }
+]
+
+
+def buildIntraDayBarResponse(data):
+    response = IntraDayBarResponse()
+    for item in data:
+        # althouth we might get a responseError _per item" (block of messages)
+        # we're going to hoist such an error right into the top level response
+        # and stop parsing the rest of the items. HistoricalDataRequest is 
+        # different because responseErrors might happen per field or per security
+        # but IntradaryBarReqests only have one security and one field
+        if item.get('responseError'):
+            response.responseError = item['responseError']
+            break
+        barItem = IntraDayBarResponseItem()
+
 
 def buildHistoricalDataResponse(data):
     response = HistoricalDataResponse()
     for item in data:
+        if item.get('responseError'):
+            response.responseError = item['responseError']
+            break
         securityDataDict = item['securityData']
-        
         # Create SecurityData message
         securityDataMsg = SecurityData()
+        if securityDataDict.get('responseError'):
+            response.responseError = item['responseError']
+            break # TODO experiment with where these response errors occur for each security
         securityDataMsg.security = securityDataDict['security']
         securityDataMsg.sequence_number = securityDataDict['sequenceNumber']
         
         # Handle fieldData
+        if item.get("securityError"):
+            fieldDataMsg = FieldData()
+
         for fieldDataItem in securityDataDict['fieldData']:
             fieldDataMsg = FieldData()
             
