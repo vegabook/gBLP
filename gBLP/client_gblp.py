@@ -39,7 +39,8 @@ from rich.console import Console; console = Console()
 from google.protobuf import empty_pb2
 
 from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
-        RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS)
+        RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS, 
+        MAX_MESSAGE_LENGTH)
 
 TTYPETICKER = bloomberg_pb2.Topic.topicType.Value("TICKER")
 TTYPESEDOL = bloomberg_pb2.Topic.topicType.Value("SEDOL1")
@@ -125,7 +126,7 @@ class Bbg:
         """Make certificates if they do not exist."""
         confdir = get_conf_dir()
         ihostandport = f"{self.grpchost}:{self.grpckeyport}"
-        ichannel = grpc.aio.insecure_channel(ihostandport)  # Insecure for keys
+        ichannel = grpc.aio.insecure_channel(ihostandport)
         idkey = input("Certificates not found. Input ID key: ")
         logger.info("Waiting for response from server...")
         async with ichannel as chan:
@@ -181,7 +182,11 @@ class Bbg:
         )
         hostandport = f"{self.grpchost}:{self.grpcport}"
         logger.info(f"Connecting to {hostandport}...")
-        self.channel = grpc.aio.secure_channel(hostandport, client_credentials)
+        self.channel = grpc.aio.secure_channel(hostandport, client_credentials, 
+            options=[
+                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+            ])
         self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
 
 
@@ -396,7 +401,14 @@ def syncmain():
         end = dt.datetime.now(),
         interval = 1
     )
+    print(intra)
 
+    # Request intraday bars
+    intra = bbg.intradayBarRequest(topic = "EURCZK Curncy",
+        start = dt.datetime(2024, 3, 28, 6, 0),
+        end = dt.datetime.now(),
+        interval = 1
+    )
     print(intra)
 
     subs = bbg.subscribe(["XETUSD Curncy"], ["PX_BID", "PX_ASK"])

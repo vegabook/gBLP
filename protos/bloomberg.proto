@@ -76,7 +76,40 @@ message SubFieldData {
   google.protobuf.Value value = 2;
 }
 
+/////////////// Reference data //////////////////
+
+//see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p164
+
+message ReferenceDataRequest {
+  ClientID cid = 1;
+  repeated string topics = 2; // securities
+  repeated string fields = 3; // fields list
+  map <string, string> options = 4; // overrides
+}
+
+
+message ReferenceDataResponse {
+  google.protobuf.Any responseError = 1;
+  repeated ReferenceDataResponseItem items = 2;
+}
+
+message ReferenceDataResponseItem {
+  RefSecurityData security_data = 1;
+}
+
+message RefSecurityData {
+  google.protobuf.Any securityError = 1;
+  string security = 2;
+  repeated google.protobuf.Any eid_data = 3;
+  int32 sequence_number = 4;
+  repeated google.protobuf.Any field_exceptions = 5;
+  repeated RefFieldData field_data = 6;
+}
+
+
 /////////////// IntradayBar data //////////////////
+
+//see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p177
 
 message IntradayBarRequest {
   ClientID cid = 1;
@@ -109,6 +142,8 @@ message IntradayBarData {
 
 
 /////////////// Historical data //////////////////
+
+//see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p170
 
 message HistoricalDataRequest {
   ClientID cid = 1;

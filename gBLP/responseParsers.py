@@ -3,17 +3,16 @@ from bloomberg_pb2 import (
     HistoricalDataResponse,
     HistoricalDataResponseItem,
     SecurityData,
-    FieldData
-    IntraDayBarResponse,
-    IntraDayBarResponseItem,
-    IntraDayBarData
+    FieldData,
+    IntradayBarResponse,
+    IntradayBarResponseItem,
+    IntradayBarData
 )
 
 from bloomberg_pb2 import (
     SubscriptionDataResponse,
     SubFieldData
 )
-
 
 
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -24,29 +23,10 @@ import datetime
 import logging
 logger = logging.getLogger(__name__)
 
-intraDayBarResponse_format = [
-    {"responseError": 
-        {"source": string, 
-         "code": string, 
-         "category": string,
-         "message": string,
-         "subCategory": string},
-        "barData": {"barTickData: [
-            {"open": float, 
-             "high": float, 
-             "low": float, 
-             "close": float, 
-             "volume": int, 
-             "numEvents": int, 
-             "value": float,
-             "time": datetime.datetime}
-        ]}
-    }
-]
 
-
-def buildIntraDayBarResponse(data):
-    response = IntraDayBarResponse()
+def buildIntradayBarResponse(data):
+    """ see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p177"""
+    response = IntradayBarResponse()
     for item in data:
         # althouth we might get a responseError _per item" (block of messages)
         # we're going to hoist such an error right into the top level response
@@ -56,10 +36,27 @@ def buildIntraDayBarResponse(data):
         if item.get('responseError'):
             response.responseError = item['responseError']
             break
-        barItem = IntraDayBarResponseItem()
+        barItem = IntradayBarResponseItem()
+        for bar in item["barData"]["barTickData"]:
+            barData = IntradayBarData()
+            barData.open = bar["open"]
+            barData.high = bar["high"]
+            barData.low = bar["low"]
+            barData.close = bar["close"]
+            barData.volume = bar["volume"]
+            barData.numEvents = bar["numEvents"]
+            barData.value = bar["value"]
+            timestamp = Timestamp()
+            timestamp.FromDatetime(bar["time"])
+            barData.time.CopyFrom(timestamp)
+            barItem.bars.append(barData)
+        response.items.append(barItem)
+    return response
+
 
 
 def buildHistoricalDataResponse(data):
+    """ see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p170"""
     response = HistoricalDataResponse()
     for item in data:
         if item.get('responseError'):

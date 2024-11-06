@@ -49,6 +49,7 @@ from bloomberg_pb2_grpc import add_BbgServicer_to_server, \
 
 from responseParsers import (
     buildHistoricalDataResponse, 
+    buildIntradayBarResponse,
     buildSubscriptionDataResponse
 )
 
@@ -66,10 +67,11 @@ from util.ConnectionAndAuthOptions import \
     addConnectionAndAuthOptions, \
     createSessionOptions
 
-from util.EventHandler import EventHandler
+from EventHandler import EventHandler
 
 from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
-        RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS)
+        RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS, 
+    MAX_MESSAGE_LENGTH)
 
 from util.certMaker import get_conf_dir, make_client_certs, make_all_certs
 from util.utils import makeName
@@ -520,8 +522,8 @@ class Bbg(BbgServicer):
             if not msg[1]["partial"]:
                 break
         if messageList:
-            print(messageList)
-            breakpoint()
+            result = buildIntradayBarResponse(messageList)
+            return result
         else:
             context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
@@ -552,8 +554,7 @@ class Bbg(BbgServicer):
             try:
                 msg = await subq.get() 
             except asyncio.CancelledError:
-                for x in range(50):
-                    print(f"----------------------------- CANCELLED {cidname} ---------------------------------")
+                print(f"----------------------------- CANCELLED {cidname} ---------------------------------")
                 break
             response = buildSubscriptionDataResponse(msg)
             yield response
