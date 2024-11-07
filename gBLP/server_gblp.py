@@ -106,7 +106,7 @@ def trace_function(frame, event, arg):
         return trace_function  # Return itself to continue tracing
 
 # Set this trace function to be used for all new threads
-threading.settrace(trace_function)
+# threading.settrace(trace_function)
 # ----------------- util functions ----------------------
 
 def serialize_datetime(obj): 

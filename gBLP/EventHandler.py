@@ -43,6 +43,7 @@ class EventHandler(object):
         timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         
         for msg in event:
+            console.print(f"[light blue]{msg}[/light blue]")
             pymsg = msg.toPy()
             correlid = msg.correlationId().value()
             if msg.messageType() == blpapi.Names.SUBSCRIPTION_FAILURE:
