@@ -68,7 +68,6 @@ logger = logging.getLogger(__name__)
 class Bbg:
     def __init__(self,
                  name=None,
-                 handler_class = None,# Optional handler class that will run in addition to defaul handler
                  grpchost=args.grpchost,
                  grpcport=args.grpcport,
                  grpckeyport=args.grpckeyport,
@@ -83,10 +82,6 @@ class Bbg:
         self.grpcport = grpcport
         self.grpckeyport = grpckeyport
         self.done = asyncio.Event()
-        if handler_class is not None:
-            self.handler = handler_class() # instantiate
-        else:
-            self.handler = None
 
         # setup dictionaries for subscription data
         self.subsdata = defaultdict(lambda: deque(maxlen = maxdDequeSize)) # store subscription data
@@ -98,9 +93,7 @@ class Bbg:
         self.thread.start()
         # Run asynchronous initialization in the event loop
         self.loop_run_async(self.connect())
-        self.stream = self.stub.subscriptionStream(empty_pb2.Empty(), metadata=[("cidname", self.cid.name)])
-        self.loop_run_async_nowait(self.subscriptionsStream(self.stream))
-        logger.info("Subscription stream started.")
+        self.streams = []
 
 
     def start_loop(self, loop):
@@ -160,13 +153,17 @@ class Bbg:
 
 
     def close(self):
-        logger.info("Closing stream")
-        self.stream.cancel()
+        logger.info("Closing streams")
+        while len(self.streams) > 0:
+            stream = self.streams.pop()
+            stream.cancel()
         logger.info("Closing channel")
-        # Schedule channel closure asynchronously
         self.loop_run_async(self.close_channel())
         logger.info("Setting done event")
         self.done.set()
+        logger.info("Joining thread")
+        self.thread.join()
+        logger.info("Thread joined. Exiting close.")
 
 
     async def makeCerts(self):
@@ -254,14 +251,18 @@ class Bbg:
     def subscribe(self, topics, 
                   fields=["LAST_PRICE"],
                   ttype=TTYPETICKER,
-                  interval=2):
+                  interval=2, 
+                  handler = None):
         """ synchronous subscribe method """
-        return self.loop_run_async(self.async_subscribe(topics, fields, ttype, interval))
+        return self.loop_run_async(self.async_subscribe(topics, fields, ttype, interval, handler))
+
 
     async def async_subscribe(self, topics, 
                               fields,
                               ttype,
-                              interval):
+                              interval, 
+                              handler):
+
         subs = bloomberg_pb2.SubscriptionList(
             cid=self.cid,
             topics=[
@@ -273,21 +274,36 @@ class Bbg:
                 ) for t in topics for f in fields   
             ]
         )
-
-        try:
-            await self.stub.subscribe(subs, metadata=[("cidname", self.cid.name)])
-            logger.info(f"Subscribed to topics: {subs}")
-        except grpc.aio.AioRpcError as e:
-            logger.error(f"gRPC AioRpcError during subscribe: {e}")
-        except AttributeError as e:
-            logger.error(f"AttributeError during subscribe: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error during subscribe: {e}")
+        stream = self.stub.subscribe(subs, metadata=[("cidname", self.cid.name)])
+        self.streams.append(stream)
+        self.loop_run_async_nowait(self.streamHandler(stream, handler))
+        logger.info("Subscription stream started.")
         return subs
 
 
+    async def streamHandler(self, stream, handler):
+        async for response in stream:
+            try:
+                if response.msgtype in (RESP_SUB, RESP_BAR):
+                    self.subsdata[response.topic].append(response)
+                elif response.msgtype in (RESP_STATUS, RESP_ERROR):
+                    self.statusLog.append(response)
+                else:
+                    pass
+                if handler:
+                    asyncio.run_coroutine_threadsafe(handler.handle(response), self.loop)
+                #if self.done.is_set():
+                #    break
+            except asyncio.CancelledError:
+                logger.info("streamHandler was cancelled.")
+                break
+            except Exception as e:
+                logger.error(f"Error in streamHandler: {e}")
+        logger.info("self.done is set. Exiting streamHandler.")
+
     def ping(self):
         return self.loop_run_async_nowait(self.async_ping())
+
 
     async def async_ping(self):
         while not self.done.is_set():
@@ -295,7 +311,7 @@ class Bbg:
             nowstamp.GetCurrentTime()
             Ping = bloomberg_pb2.Ping(cid=self.cid, timestamp=nowstamp)
             try:
-                pong = await self.stub.ping(Ping, timeout = PONG_SECONDS_TIMEOUT * 5)
+                pong = await self.stub.ping(Ping, timeout = PONG_SECONDS_TIMEOUT)
             except grpc.aio.AioRpcError as e:
                 if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                     logger.error("Ping timeout. Closing Bbg session.")
@@ -320,26 +336,6 @@ class Bbg:
         return await self.stub.subscriptionInfo(self.cid)
 
     
-    async def subscriptionsStream(self, stream):
-        async for response in stream:
-            try:
-                if response.msgtype in (RESP_SUB, RESP_BAR):
-                    self.subsdata[response.topic].append(response)
-                elif response.msgtype in (RESP_STATUS, RESP_ERROR):
-                    self.statusLog.append(response)
-                else:
-                    pass
-                if self.handler:
-                    #self.loop.call_soon_threadsafe(self.handler.handle, response)
-                    asyncio.run_coroutine_threadsafe(self.handler.handle(response), self.loop)
-                if self.done.is_set():
-                    break
-            except asyncio.CancelledError:
-                logger.info("subscriptionsStream was cancelled.")
-                break
-            except Exception as e:
-                logger.error(f"Error in subscriptionsStream: {e}")
-        logger.info("self.done is set. Exiting subscriptionsStream.")
 
 
 
@@ -348,21 +344,22 @@ class Handler():
         This must be sent as a class and not as an instance, because it
         will be instantiated in the Bbg class. """
 
-    def __init__(self):
+    def __init__(self, colour = "blue"):
         self.mysubsdata = defaultdict(lambda: deque(maxlen = 1000))
         self.statusLog = deque(maxlen = 1000)
+        self.colour = colour
     
     async def handle(self, response):
         # this function must be present in any handler
         try:
             if response.msgtype in (RESP_SUB, RESP_BAR):
                 self.statusLog.append(response)
-                print(Fore.GREEN, f"Received: {response}", Style.RESET_ALL)
+                console.print(f"[{self.colour}]{response}[/{self.colour}]")
             else:
                 self.mysubsdata[response.topic].append(response)
-                print(Fore.MAGENTA, Style.BRIGHT, f"Received: {response}", Style.RESET_ALL)
+                console.print(f"[magenta]{response}[/magenta]")   
         except Exception as e:
-            print(f"{Fore.MAGENTA}Error: {e}{Style.RESET_ALL}")
+            print(f"Error in handler: {e}")
 
 
 def syncmain():
@@ -417,7 +414,7 @@ if __name__ == "__main__":
         bbg.delCerts()
     else:
         try:
-            bbg = Bbg(handler_class = Handler)  # Optional handler class that will run in addition to defaul handler
+            bbg = Bbg()
             pong = bbg.ping() # start by pinging
             hist = bbg.historicalDataRequest(
                 ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
@@ -443,7 +440,11 @@ if __name__ == "__main__":
             )
             print(intra)
 
-            subs = bbg.subscribe(["USDZAR Curncy"])
+            handler_zar = Handler("green")
+            subs = bbg.subscribe(["USDZAR Curncy"], handler = handler_zar)
+
+            handler_eur = Handler("blue")
+            subs = bbg.subscribe(["EURCZK Curncy"], handler = handler_eur)
 
             IPython.embed()
         except KeyboardInterrupt:

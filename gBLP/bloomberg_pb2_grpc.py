@@ -125,25 +125,10 @@ class BbgStub(object):
                 request_serializer=bloomberg__pb2.Pong.SerializeToString,
                 response_deserializer=bloomberg__pb2.Ping.FromString,
                 _registered_method=True)
-        self.subscriptionStream = channel.unary_stream(
-                '/bloomberg.Bbg/subscriptionStream',
-                request_serializer=bloomberg__pb2.ClientID.SerializeToString,
-                response_deserializer=bloomberg__pb2.SubscriptionDataResponse.FromString,
-                _registered_method=True)
-        self.subscribe = channel.unary_unary(
+        self.subscribe = channel.unary_stream(
                 '/bloomberg.Bbg/subscribe',
                 request_serializer=bloomberg__pb2.SubscriptionList.SerializeToString,
-                response_deserializer=bloomberg__pb2.SubscriptionList.FromString,
-                _registered_method=True)
-        self.unsubscribe = channel.unary_unary(
-                '/bloomberg.Bbg/unsubscribe',
-                request_serializer=bloomberg__pb2.SubscriptionList.SerializeToString,
-                response_deserializer=bloomberg__pb2.SubscriptionList.FromString,
-                _registered_method=True)
-        self.subscriptionInfo = channel.unary_unary(
-                '/bloomberg.Bbg/subscriptionInfo',
-                request_serializer=bloomberg__pb2.ClientID.SerializeToString,
-                response_deserializer=bloomberg__pb2.SubscriptionList.FromString,
+                response_deserializer=bloomberg__pb2.SubscriptionDataResponse.FromString,
                 _registered_method=True)
         self.historicalDataRequest = channel.unary_unary(
                 '/bloomberg.Bbg/historicalDataRequest',
@@ -173,25 +158,7 @@ class BbgServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def subscriptionStream(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def subscribe(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def unsubscribe(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def subscriptionInfo(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -223,25 +190,10 @@ def add_BbgServicer_to_server(servicer, server):
                     request_deserializer=bloomberg__pb2.Pong.FromString,
                     response_serializer=bloomberg__pb2.Ping.SerializeToString,
             ),
-            'subscriptionStream': grpc.unary_stream_rpc_method_handler(
-                    servicer.subscriptionStream,
-                    request_deserializer=bloomberg__pb2.ClientID.FromString,
-                    response_serializer=bloomberg__pb2.SubscriptionDataResponse.SerializeToString,
-            ),
-            'subscribe': grpc.unary_unary_rpc_method_handler(
+            'subscribe': grpc.unary_stream_rpc_method_handler(
                     servicer.subscribe,
                     request_deserializer=bloomberg__pb2.SubscriptionList.FromString,
-                    response_serializer=bloomberg__pb2.SubscriptionList.SerializeToString,
-            ),
-            'unsubscribe': grpc.unary_unary_rpc_method_handler(
-                    servicer.unsubscribe,
-                    request_deserializer=bloomberg__pb2.SubscriptionList.FromString,
-                    response_serializer=bloomberg__pb2.SubscriptionList.SerializeToString,
-            ),
-            'subscriptionInfo': grpc.unary_unary_rpc_method_handler(
-                    servicer.subscriptionInfo,
-                    request_deserializer=bloomberg__pb2.ClientID.FromString,
-                    response_serializer=bloomberg__pb2.SubscriptionList.SerializeToString,
+                    response_serializer=bloomberg__pb2.SubscriptionDataResponse.SerializeToString,
             ),
             'historicalDataRequest': grpc.unary_unary_rpc_method_handler(
                     servicer.historicalDataRequest,
@@ -320,7 +272,7 @@ class Bbg(object):
             _registered_method=True)
 
     @staticmethod
-    def subscriptionStream(request,
+    def subscribe(request,
             target,
             options=(),
             channel_credentials=None,
@@ -333,90 +285,9 @@ class Bbg(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/bloomberg.Bbg/subscriptionStream',
-            bloomberg__pb2.ClientID.SerializeToString,
-            bloomberg__pb2.SubscriptionDataResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def subscribe(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
             '/bloomberg.Bbg/subscribe',
             bloomberg__pb2.SubscriptionList.SerializeToString,
-            bloomberg__pb2.SubscriptionList.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def unsubscribe(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/unsubscribe',
-            bloomberg__pb2.SubscriptionList.SerializeToString,
-            bloomberg__pb2.SubscriptionList.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def subscriptionInfo(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/subscriptionInfo',
-            bloomberg__pb2.ClientID.SerializeToString,
-            bloomberg__pb2.SubscriptionList.FromString,
+            bloomberg__pb2.SubscriptionDataResponse.FromString,
             options,
             channel_credentials,
             insecure,

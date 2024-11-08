@@ -20,11 +20,8 @@ service KeyManager {
 service Bbg {
   rpc ping(Ping) returns (Pong) {}
   rpc pong(Pong) returns (Ping) {}
-  rpc subscriptionStream(ClientID) returns (stream SubscriptionDataResponse) {} 
-  rpc subscribe(SubscriptionList) returns (SubscriptionList) {}
-  rpc unsubscribe(SubscriptionList) returns (SubscriptionList) {}
-  rpc subscriptionInfo(ClientID) returns (SubscriptionList) {}
-  rpc historicalDataRequest (HistoricalDataRequest) returns (HistoricalDataResponse) {}
+  rpc subscribe(SubscriptionList) returns (stream SubscriptionDataResponse) {} 
+  rpc historicalDataRequest(HistoricalDataRequest) returns (HistoricalDataResponse) {}
   //rpc intradayTickRequest. maybe "tick" or "gblpTick"
   rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
   //rpc historicalDataRequest "daily"
@@ -103,7 +100,7 @@ message RefSecurityData {
   repeated google.protobuf.Any eid_data = 3;
   int32 sequence_number = 4;
   repeated google.protobuf.Any field_exceptions = 5;
-  repeated RefFieldData field_data = 6;
+ // repeated RefFieldData field_data = 6;
 }
 
 
