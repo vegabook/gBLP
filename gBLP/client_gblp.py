@@ -74,10 +74,7 @@ class Bbg:
                  maxdDequeSize = 10000):       # max size of deques each holding one topic
 
         # setup grpc
-        if name is None:
-            self.cid= bloomberg_pb2.ClientID(name=makeName(alphaLength=6, digitLength=3))
-        else:
-            self.cid = bloomberg_pb2.ClientID(name=name)
+        self.name = makeName(alphaLength=6, digitLength=3)
         self.grpchost = grpchost
         self.grpcport = grpcport
         self.grpckeyport = grpckeyport
@@ -215,14 +212,13 @@ class Bbg:
         est = protoTimestamp()
         est.FromDatetime(end)
         hreq = bloomberg_pb2.HistoricalDataRequest(
-            cid=self.cid,
             topics=topics,
             fields=fields,
             start=sst,
             end=est
         )
         logger.info(f"Requesting historical data: {hreq}")
-        data = await self.stub.historicalDataRequest(hreq, metadata=[("cidname", self.cid.name)])
+        data = await self.stub.historicalDataRequest(hreq, metadata=[("clientName", self.name)])
         return data
 
     def intradayBarRequest(self, topic,
@@ -238,14 +234,13 @@ class Bbg:
         est = protoTimestamp()
         est.FromDatetime(end)
         bareq = bloomberg_pb2.IntradayBarRequest(
-            cid=self.cid,
             topic=topic,
             start=sst,
             end=est,
             interval=interval
         )
         logger.info(f"Requesting intraday bars: {bareq}")
-        data = await self.stub.intradayBarRequest(bareq, metadata=[("cidname", self.cid.name)])
+        data = await self.stub.intradayBarRequest(bareq, metadata=[("clientName", self.name)])
         return data
 
     def subscribe(self, topics, 
@@ -254,6 +249,12 @@ class Bbg:
                   interval=2, 
                   handler = None):
         """ synchronous subscribe method """
+        if not type(topics) == list:
+            logger.error("Topics must be a list.")
+            return
+        if not type(fields) == list:
+            logger.error("Fields must be a list.")
+            return
         return self.loop_run_async(self.async_subscribe(topics, fields, ttype, interval, handler))
 
 
@@ -262,19 +263,17 @@ class Bbg:
                               ttype,
                               interval, 
                               handler):
-
         subs = bloomberg_pb2.SubscriptionList(
-            cid=self.cid,
             topics=[
                 bloomberg_pb2.Topic(
                     name=t, 
-                    field=f,
+                    fields = fields,
                     ttype=ttype, 
                     interval=interval
-                ) for t in topics for f in fields   
+                ) for t in topics
             ]
         )
-        stream = self.stub.subscribe(subs, metadata=[("cidname", self.cid.name)])
+        stream = self.stub.subscribe(subs, metadata=[("clientName", self.name)])
         self.streams.append(stream)
         self.loop_run_async_nowait(self.streamHandler(stream, handler))
         logger.info("Subscription stream started.")
@@ -309,9 +308,11 @@ class Bbg:
         while not self.done.is_set():
             nowstamp = protoTimestamp()
             nowstamp.GetCurrentTime()
-            Ping = bloomberg_pb2.Ping(cid=self.cid, timestamp=nowstamp)
+            Ping = bloomberg_pb2.Ping(timestamp=nowstamp)
             try:
-                pong = await self.stub.ping(Ping, timeout = PONG_SECONDS_TIMEOUT)
+                pong = await self.stub.ping(Ping, 
+                                            timeout = PONG_SECONDS_TIMEOUT, 
+                                            metadata=[("clientName", self.name)])
             except grpc.aio.AioRpcError as e:
                 if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                     logger.error("Ping timeout. Closing Bbg session.")
@@ -329,11 +330,6 @@ class Bbg:
         pass
 
 
-    def subscriptionInfo(self):
-        return self.loop_run_async(self.aysnc_subscriptionInfo())
-
-    async def aysnc_subscriptionInfo(self):
-        return await self.stub.subscriptionInfo(self.cid)
 
     
 

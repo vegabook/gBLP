@@ -18,24 +18,23 @@ class EventHandler(object):
     def __init__(self, parent):
         self.parent = parent
 
-    def multisend(self, correlid, sendmsg):
-        queues = [x[1] for x in self.parent.correlators[correlid]] 
-        for q in queues:
-            self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
+    def multisend(self, cid, sendmsg):
+        q = self.parent.correlators[cid]
+        self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
 
     def getTimeStamp(self):
         return time.strftime("%Y-%m-%d %H:%M:%S")
 
     def processResponseEvent(self, event, partial):
         for msg in event:
-            correlid = msg.correlationId().value()
+            cid = msg.correlationId().value()
             logger.info((f"Received response to request {msg.getRequestId()} "
                         f"partial {partial}"))
-            sendmsg = (RESP_REF, {"correlid": correlid, "partial": partial, "data": msg.toPy()})
+            sendmsg = (RESP_REF, {"cid": cid, "partial": partial, "data": msg.toPy()})
             # now put message into correct asyncio queue. Ceremony here is because we're calling async from sync
-            self.multisend(correlid, sendmsg)
+            self.multisend(cid, sendmsg)
             if not partial:   # then we're done with this so deleate the correlator entry
-                del self.parent.correlators[correlid]
+                del self.parent.correlators[cid]
 
 
     def processSubscriptionStatus(self, event):
@@ -45,19 +44,19 @@ class EventHandler(object):
         for msg in event:
             console.print(f"[light blue]{msg}[/light blue]")
             pymsg = msg.toPy()
-            correlid = msg.correlationId().value()
+            cid = msg.correlationId().value()
             if msg.messageType() == blpapi.Names.SUBSCRIPTION_FAILURE:
-                sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "validated": False})
+                sendmsg = (RESP_STATUS, {"topic": cid, "timestamp": timestampdt, "validated": False})
                 # TODO remove from correlators when failure
             elif msg.messageType() == blpapi.Names.SUBSCRIPTION_TERMINATED:
-                sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "terminated": True})
+                sendmsg = (RESP_STATUS, {"topic": cid, "timestamp": timestampdt, "terminated": True})
                 # TODO remove from correlators when failure
             elif msg.messageType() == blpapi.Names.SUBSCRIPTION_STARTED:
-                sendmsg = (RESP_STATUS, {"topic": correlid, "timestamp": timestampdt, "validated": True})
+                sendmsg = (RESP_STATUS, {"topic": cid, "timestamp": timestampdt, "validated": True})
             else:
                 sendmsg = None
             if sendmsg:
-                self.multisend(correlid, sendmsg)
+                self.multisend(cid, sendmsg)
 
     def searchMsg(self, msg, fields):
         return [{"field": field, "value": msg[field]} 
@@ -87,7 +86,7 @@ class EventHandler(object):
         timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         for msg in event:
             msgtype = msg.messageType()
-            correlid = msg.correlationId().value()
+            cid = msg.correlationId().value()
             # bars --->
             if msgtype in (blpapi.Name("MarketBarUpdate"),
                            blpapi.Name("MarketBarStart"),
@@ -102,10 +101,10 @@ class EventHandler(object):
                 # mktdata event type
                 sendmsg = (RESP_SUB, 
                        {"timestamp": timestampdt, 
-                       "topic": correlid,
+                       "topic": cid,
                        "prices": self.searchMsg(msg, DEFAULT_FIELDS)})
                 # now get all the queues that needs this message
-                self.multisend(correlid, sendmsg)
+                self.multisend(cid, sendmsg)
 
             # something else --->
             else:

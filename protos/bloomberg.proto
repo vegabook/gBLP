@@ -29,11 +29,6 @@ service Bbg {
 }
 
 
-/////////////// Common  /////////////////
-
-message ClientID {
-  string name = 1;
-}
 
 /////////////// Subscription /////////////////
 
@@ -47,14 +42,13 @@ message Topic {
   }
   string name = 1;
   topicType ttype = 2; 
-  string field = 3;
+  repeated string fields = 3;
   int32 interval = 4;
   bool validated = 5;
   bool terminated = 6;
 }
 
 message SubscriptionList {
-  ClientID cid = 1;
   repeated Topic topics = 2;
 }
 
@@ -78,7 +72,6 @@ message SubFieldData {
 //see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p164
 
 message ReferenceDataRequest {
-  ClientID cid = 1;
   repeated string topics = 2; // securities
   repeated string fields = 3; // fields list
   map <string, string> options = 4; // overrides
@@ -109,7 +102,6 @@ message RefSecurityData {
 //see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p177
 
 message IntradayBarRequest {
-  ClientID cid = 1;
   string topic = 2; // securities
   google.protobuf.Timestamp start = 3; // startDate
   google.protobuf.Timestamp end = 4; // endDate
@@ -143,7 +135,6 @@ message IntradayBarData {
 //see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p170
 
 message HistoricalDataRequest {
-  ClientID cid = 1;
   repeated string topics = 2; // securities
   repeated string fields = 3; // fields list
   google.protobuf.Timestamp start = 4; // startDate
@@ -198,13 +189,11 @@ message KeyResponse {
 
 message Ping
 {
-  ClientID cid = 1;
   google.protobuf.Timestamp timestamp = 2;
 }
 
 message Pong
 {
-  ClientID cid = 1;
   google.protobuf.Timestamp timestamp = 2;
 }
 

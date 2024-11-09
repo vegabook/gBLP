@@ -256,7 +256,7 @@ class SessionRunner(object):
         self.interval = options.interval # subscription interval
         self.maxEventQueueSize = 10000
         self.servicesOpen = dict()
-        self.correlators = defaultdict(set)
+        self.correlators = dict()
         self.alive = False
         self.session = None # must SessionRunner.open() one first
         self.servicesAvail = {"Subscribe": "//blp/mktdata",
@@ -360,7 +360,7 @@ class SessionRunner(object):
         corrString = f"hist:{cid.name}:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
-        self.correlators[corrString].add((cid.name, q))
+        self.correlators[corrString] = q
         self.session.sendRequest(bbgRequest, correlationId=correlid)
 
 
@@ -385,86 +385,37 @@ class SessionRunner(object):
         corrString = f"bar:{cid.name}:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
-        self.correlators[corrString].add((cid.name, q))
+        self.correlators[corrString] = q
         self.session.sendRequest(bbgRequest, correlationId=correlid)
 
 
 
     # ------------ subscriptions -------------------
 
-    async def subscribe_deprecated(self, subscriptionList: SubscriptionList, subq: asyncio.Queue):
+    async def subscribe(self, 
+                        subscriptionList: SubscriptionList, 
+                        subq: asyncio.Queue):
         """ subscribe to a list of topics """
         
         # make sure the service is open
-        cid = subscriptionList.cid
         success, service = self._getService("Subscribe")
         if not success:
-            return SubscriptionList(cid=cid, topics=[]) # empty
-        # split out the subscriptionList
+            return False
         bbgsublist = blpapi.SubscriptionList()
-        newRequests = SubscriptionList(cid=cid) # empty at first
-        existRequests = SubscriptionList(cid=cid) # empty at first
+        topiclist = []
         for t in subscriptionList.topics:
+            intervalstr = f"interval={int(t.interval)}"
+            fieldsstr = ",".join(t.fields)
             topicTypeName = Topic.topicType.Name(t.ttype) # SEDOL1/TICKER/CUSIP etc
-            corrString = f"sub:{t.name}:{topicTypeName}:{t.interval}:{t.field}" # make correlid
-            # now add this to be subscribed if necessary
-            if not corrString in self.correlators:    # not already subscribed 
-                logger.info(f"Subscribing to {t.name} {t.ttype} {t.interval} {t.field}")
-                substring = f"{service}/{topicTypeName}/{t.name}"
-                intervalstr = f"interval={int(t.interval)}"
-                correlid = blpapi.CorrelationId(corrString)
-                bbgsublist.add(substring, t.field, intervalstr, correlid)
-                newRequests.topics.append(t)
-            else:
-                existRequests.topics.append(t)
-                logger.info(f"Already subscribed to {t.name} {topicTypeName} {t.interval} {t.field}")
-
-            # add this topic to the correlator with this queue
-            self.correlators[corrString].add((cid.name, subq))
-            print(self.correlators)
-
-        # subscribe to any securities that were not already subscribed 
-        if bbgsublist.size():
+            substring = f"{service}/{topicTypeName}/{t.name}?fields={fieldsstr}&{intervalstr}"
+            topiclist.append(substring)
+            correlid = blpapi.CorrelationId(substring)
+            bbgsublist.add(substring, correlationId=correlid)
+            self.correlators[substring] = subq
+        if bbgsublist.size() > 0:
             self.session.subscribe(bbgsublist)
-        return newRequests
+        return True
 
-
-    async def subscribe(self, subscriptionList: SubscriptionList, subq: asyncio.Queue):
-        """ subscribe to a list of topics """
-        
-        # make sure the service is open
-        cid = subscriptionList.cid # NEXT THESE SHOULD BE PER STREAM
-
-        success, service = self._getService("Subscribe")
-        if not success:
-            return SubscriptionList(cid=cid, topics=[]) # empty
-        # split out the subscriptionList
-        bbgsublist = blpapi.SubscriptionList()
-        newRequests = SubscriptionList(cid=cid) # empty at first
-        existRequests = SubscriptionList(cid=cid) # empty at first
-        for t in subscriptionList.topics:
-            topicTypeName = Topic.topicType.Name(t.ttype) # SEDOL1/TICKER/CUSIP etc
-            corrString = f"sub:{t.name}:{topicTypeName}:{t.interval}:{t.field}" # make correlid
-            # now add this to be subscribed if necessary
-            if not corrString in self.correlators:    # not already subscribed 
-                logger.info(f"Subscribing to {t.name} {t.ttype} {t.interval} {t.field}")
-                substring = f"{service}/{topicTypeName}/{t.name}"
-                intervalstr = f"interval={int(t.interval)}"
-                correlid = blpapi.CorrelationId(corrString)
-                bbgsublist.add(substring, t.field, intervalstr, correlid)
-                newRequests.topics.append(t)
-            else:
-                existRequests.topics.append(t)
-                logger.info(f"Already subscribed to {t.name} {topicTypeName} {t.interval} {t.field}")
-
-            # add this topic to the correlator with this queue
-            self.correlators[corrString].add((cid.name, subq))
-            print(self.correlators)
-
-        # subscribe to any securities that were not already subscribed 
-        if bbgsublist.size():
-            self.session.subscribe(bbgsublist)
-        return newRequests
 
 
     async def unsubscribe(self, subscriptionList: SubscriptionList):
@@ -510,27 +461,28 @@ class Bbg(BbgServicer):
         self.session = SessionRunner(options=globalOptions)
         self.grpc_rep = self.session.open()
 
+    def makeClientID(self, context):
+        clientName = dict(context.invocation_metadata())["clientName"]
+        ip = context.peer().split(":")[1]
+        return f"{clientName}:{ip}"
+
     async def closeSession(self):
         await self.session.close()
 
 
     async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
-        cid = request.cid
-        cidname = cid.name
-        if not self.queues.get(cidname):
-            self.queues[cidname] = asyncio.Queue()
         nowstamp = protoTimestamp()
         nowstamp.GetCurrentTime()
-        pong = Pong(cid=cid, timestamp=nowstamp)
+        pong = Pong(timestamp=nowstamp)
         return pong
 
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
-        cidname = dict(context.invocation_metadata())["cidname"]
-        if not self.queues.get(cidname):
-            context.abort(grpc.StatusCode.NOT_FOUND, "Context not initialized")
+        clientID = self.makeClientID(context)
+        logger.info(f"Received historical data request {request} from {clientID}")
         q = asyncio.Queue()
+        q.clientID = clientID
         messageList = []
         await self.session.historicalDataRequest(request, q)
         while True:
@@ -547,10 +499,10 @@ class Bbg(BbgServicer):
 
     async def intradayBarRequest(self, request: IntradayBarRequest,
                                   context: grpc.aio.ServicerContext) -> IntradayBarResponse:
-        cidname = dict(context.invocation_metadata())["cidname"]
-        if not self.queues.get(cidname):
-            context.abort(grpc.StatusCode.NOT_FOUND, "Context not initialized")
+        clientID = self.makeClientID(context)
+        logger.info(f"Received intraday bar request {request} from {clientID}")
         q = asyncio.Queue()
+        q.clientID = clientID
         messageList = []
         await self.session.intradayBarRequest(request, q)
         while True:
@@ -567,15 +519,20 @@ class Bbg(BbgServicer):
 
     async def subscribe(self, subscriptionList: SubscriptionList, 
                                  context: grpc.aio.ServicerContext) -> SubscriptionDataResponse:
+        clientID = self.makeClientID(context)
+        logger.info(f"Subscribing {subscriptionList} for {clientID}")
         subq = asyncio.Queue()
-        subscribeRequests = await self.session.subscribe(subscriptionList, subq)
+        subq.clientID = clientID
+        success = await self.session.subscribe(subscriptionList, subq)
+        if not success:
+            context.abort(grpc.StatusCode.NOT_FOUND, "Failed to subscribe")
         while not done.is_set():
             # Get messages from the session's queue
             # async get from the queue
             try:
                 msg = await subq.get() 
             except asyncio.CancelledError:
-                self.session.unsubscribe(subscribeRequests)
+                self.session.unsubscribe(subscriptionList)
                 logger.info("Subscription stream cancelled")
                 break
             response = buildSubscriptionDataResponse(msg)
