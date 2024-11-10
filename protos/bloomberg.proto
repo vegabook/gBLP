@@ -38,15 +38,43 @@ enum topicType {
   CUSIP = 3;
 }
 
+enum subscriptionType {
+  ANY = 0;
+  TICK = 1;
+  BAR = 2;
+}
+
 message FieldVal {
   string name = 1;
   google.protobuf.Value val = 2;
   string valtype = 3;
 }
 
+
+enum barType {
+  OTHER = 0;
+  MARKETBARUPDATE = 1;
+  MARKETBARSTART = 2;
+  MARKETBAREND = 3;
+  MARKETBARINTERVALEND = 4;
+}
+
+
 message FieldVals {
   repeated FieldVal vals = 1;
   google.protobuf.Timestamp timestamp = 2;
+}
+
+message BarVals {
+  float open = 1;
+  float high = 2;
+  float low = 3;
+  float close = 4;
+  int32 volume = 5;
+  int32 numEvents = 6;
+  float value = 7;
+  google.protobuf.Timestamp timestamp = 8;
+  barType bartype = 9;
 }
 
 message Status {
@@ -61,14 +89,20 @@ message Topic {
   repeated string fields = 4;
   oneof data {
     FieldVals fieldvals = 5;
-    Status status = 6;
+    BarVals barvals = 6;
+    Status status = 7;
   }
 }
+
 
 message TopicList {
   string name = 1;
   repeated Topic topics = 2;
+  subscriptionType subtype = 3;
 }
+
+
+/////////////// Bar Subscription //////////////////
 
 
 /////////////// Reference data //////////////////

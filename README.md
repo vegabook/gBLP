@@ -12,8 +12,9 @@ $$\textcolor{JungleGreen}{\rule{120cm}{0.5mm}}$$
 
 
 ## Status
-_This is an alpha work in progress_
+Graduating this project to beta 0.1.0.
 * `historicalDataRequest` is working
+* `intradayBarRequest` is working
 * `subscribe` / `unsubscribe` is working via a threaded async class that does not take over your REPL. 
 
 
@@ -52,6 +53,11 @@ you will need access to the IP address of your server.
 1. In a shell on your client machine, clone this repo and `cd gRPC/src`. 
 2. Ensure Python 3.10+ is installed and `pip install -r requirements.txt`.
 3. Run the client: `python client_gblp.py --grpchost <your_ip> --grpcport 50051`
+
+
+
+#### Functions
+"interval" is seconds for a tick, and minutes for a bar. #TODO
 
 
 
