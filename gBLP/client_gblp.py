@@ -36,7 +36,6 @@ from collections import deque, defaultdict
 import IPython
 from queue import Queue
 from rich.console import Console; console = Console()
-#from rich.traceback import install; install()
 from google.protobuf import empty_pb2
 
 from constants import (
@@ -257,7 +256,9 @@ class Bbg:
             fields=DEFAULT_FIELDS,
             topictype=topicType.TICKER,
             interval=2, 
-            name=makeName(4, 3)) -> bloomberg_pb2.TopicList:
+            name=makeName(4, 3), 
+            bar=False) -> bloomberg_pb2.TopicList:
+        # TODO implement bar here and not in barsub
         """Make a topic list."""
         if not type(topics) == list:
             logger.error("Topics must be a list.")
@@ -270,10 +271,11 @@ class Bbg:
                 topic=topic,
                 fields=fields,
                 topictype=topictype,
-                interval=interval
+                interval=interval,
             ) for topic in topics
         ]
-        return bloomberg_pb2.TopicList(name=name, topics=preptopics)
+        subtype = bloomberg_pb2.subscriptionType.BAR if bar else bloomberg_pb2.subscriptionType.TICK
+        return bloomberg_pb2.TopicList(name=name, topics=preptopics, subtype=subtype)
 
     def sub(self, topics, handler=None):
         """ synchronous subscribe method """
@@ -358,7 +360,14 @@ class Handler():
     async def handle(self, response):
         # this function must be present in any handler
         try:
-            console.print(f"[{self.colour}]{response}[/{self.colour}]")
+            if response.HasField("status"):
+                console.print(f"[magenta]{response.status}[/magenta]")
+            elif response.HasField("barvals"):
+                if response.barvals.bartype != bloomberg_pb2.barType.MARKETBARUPDATE:
+                    console.print(f"[{self.colour}]Intraday bar: {response.barvals}[/{self.colour}]")
+            else:
+                console.print(f"[{self.colour}]Bar: {response.bar}[/{self.colour}]")
+                console.print(f"[{self.colour}]{response}[/{self.colour}]")
         except Exception as e:
             print(f"Error in handler: {e}")
 
@@ -396,12 +405,12 @@ if __name__ == "__main__":
             )
             print(intra)
 
-            handler_eth = Handler("green")
-            subs = bbg.mtl(["XETUSD Curncy"]) 
-            bbg.sub(subs, handler = handler_eth)
+            #handler_eth = Handler("blue")
+            #subs = bbg.mtl(["XETUSD Curncy"], ALL_FIELDS)
+            #bbg.sub(subs, handler = handler_eth)
 
-            handler_btc = Handler("blue")
-            subs = bbg.mtl(["XBTUSD Curncy"], ALL_FIELDS)
+            handler_btc = Handler("yellow")
+            subs = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], ["LAST_PRICE"], bar=True, interval = 5)
             bbg.sub(subs, handler = handler_btc)
 
             IPython.embed()

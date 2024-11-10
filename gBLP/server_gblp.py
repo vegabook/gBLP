@@ -41,6 +41,7 @@ from bloomberg_pb2 import Topic
 from bloomberg_pb2 import Ping 
 from bloomberg_pb2 import Pong 
 from bloomberg_pb2 import topicType
+from bloomberg_pb2 import subscriptionType
 
 from bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
 from bloomberg_pb2_grpc import add_BbgServicer_to_server, \
@@ -393,15 +394,17 @@ class SessionRunner(object):
         substring = f"{service}/{topicTypeName}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
         return substring
 
-    async def sub(self, 
-                        topicList: TopicList, 
-                        subq: asyncio.Queue):
+    async def sub(self, topicList: TopicList, 
+                        subq: asyncio.Queue) -> bool:
         """ subscribe to a list of topics """
         
         # make sure the service is open
-        success, service = self._getService("Subscribe")
+        if topicList.subtype == subscriptionType.BAR:
+            success, service = self._getService("BarSubscribe")
+        else:
+            success, service = self._getService("Subscribe")
         if not success:
-            return False
+            return false
         bbgsublist = blpapi.SubscriptionList()
         for t in topicList.topics:
             substring = self.makeCorrelatorString(t, service)
@@ -424,9 +427,12 @@ class SessionRunner(object):
 
     async def unsub(self, topicList: TopicList):
         """ unsubscribe from a list of topics """
-        success, service = self._getService("Subscribe")
+        if topicList.subtype == subscriptionType.BAR:
+            success, service = self._getService("BarSubscribe")
+        else:
+            success, service = self._getService("Subscribe")
         if not success:
-            return False
+            return false
         for t in topicList.topics:
             substring = self.makeCorrelatorString(t, service)
             logger.info(f"Unsubscribing {substring}")
