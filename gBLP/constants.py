@@ -13,3 +13,26 @@ MAX_MESSAGE_LENGTH = 20000000   # the maximum GRPC message length
 PONG_SECONDS_TIMEOUT = 5 # the number of seconds to wait for a pong before disconnecting
 
 
+#from bloomberg_pb2 import Topic
+#
+#topicTypeName = Topic.topicType.Name(topic.ttype) # SEDOL1/TICKER/CUSIP etc
+#
+#
+#
+#enum msgType {
+#  UNKNOWN = 0;
+#  INFO = 1;
+#  REFDATA = 2;
+#  SUBDATA = 3;
+#  BARDATA = 4;
+#  STATUS = 5;
+#  ERROR = 6;
+#  ACK = 7;
+#}
+#
+#enum topicType {
+#  TICKER = 0;
+#  SEDOL1 = 1;
+#  CUSIP = 2;
+#}
+

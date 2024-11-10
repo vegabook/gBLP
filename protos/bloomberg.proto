@@ -2,14 +2,13 @@
 
 syntax = "proto3";
 
-
 package bloomberg;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/any.proto";
 //import "google/protobuf/wrappers.proto";
-//import "google/protobuf/empty.proto";
+import "google/protobuf/empty.proto";
 
 // Key management
 service KeyManager {
@@ -20,7 +19,9 @@ service KeyManager {
 service Bbg {
   rpc ping(Ping) returns (Pong) {}
   rpc pong(Pong) returns (Ping) {}
-  rpc subscribe(SubscriptionList) returns (stream SubscriptionDataResponse) {} 
+  rpc sub(TopicList) returns (stream Topic) {} 
+  rpc unsub(TopicList) returns (google.protobuf.Empty) {}
+  rpc subscriptionInfo(google.protobuf.Empty) returns (TopicList) {}
   rpc historicalDataRequest(HistoricalDataRequest) returns (HistoricalDataResponse) {}
   //rpc intradayTickRequest. maybe "tick" or "gblpTick"
   rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
@@ -28,44 +29,51 @@ service Bbg {
   //rpc referenceDataRequest "ref"
 }
 
-
-
 /////////////// Subscription /////////////////
 
 
-message Topic {
-  enum topicType {
-    UNKNOWN = 0;
-    TICKER = 1;
-    SEDOL1 = 2;
-    CUSIP = 3;
-  }
-  string name = 1;
-  topicType ttype = 2; 
-  repeated string fields = 3;
-  int32 interval = 4;
-  bool validated = 5;
-  bool terminated = 6;
+enum msgType {
+  UNKNOWN = 0;
+  INFO = 1;
+  REFDATA = 2;
+  SUBDATA = 3;
+  BARDATA = 4;
+  STATUS = 5;
+  ERROR = 6;
+  ACK = 7;
 }
 
-message SubscriptionList {
+enum topicType {
+  NONE = 0;
+  TICKER = 1;
+  SEDOL1 = 2;
+  CUSIP = 3;
+}
+
+
+message Field {
+  string name = 1;
+  google.protobuf.Value val = 2;
+}
+
+
+message Topic {
+  string topic = 1;
+  topicType topictype = 2; 
+  int32 interval = 3;
+  msgType msgtype = 4;
+  google.protobuf.Timestamp timestamp = 5;   
+  repeated Field fields = 6;
+  google.protobuf.Any status = 7;
+  bool validated = 8;
+  bool terminated = 9;
+}
+
+message TopicList {
+  string name = 1;
   repeated Topic topics = 2;
 }
 
-message SubscriptionDataResponse {
-  string msgtype = 1;
-  string topic = 2;                          
-  google.protobuf.Timestamp timestamp = 3;   
-  repeated SubFieldData fields = 4;
-  bool validated = 5;
-  bool terminated = 6;
-
-}
-
-message SubFieldData {
-  string field = 1;
-  google.protobuf.Value value = 2;
-}
 
 /////////////// Reference data //////////////////
 

@@ -6,13 +6,11 @@ from bloomberg_pb2 import (
     FieldData,
     IntradayBarResponse,
     IntradayBarResponseItem,
-    IntradayBarData
+    IntradayBarData,
+    Topic,
+    Field
 )
 
-from bloomberg_pb2 import (
-    SubscriptionDataResponse,
-    SubFieldData
-)
 
 
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -112,40 +110,6 @@ def buildHistoricalDataResponse(data):
     return response
 
 
-
-def buildSubscriptionDataResponse(data):
-    #('subdata', {'timestamp': datetime.datetime(2024, 9, 21, 23, 15, 7), 
-    #'topic': 'XBTUSD Curncy', 
-    #'prices': [{'field': 'LAST_PRICE', 'value': 63126.18}, {'field': 'BID', 'value': 63122.35}, {'field': 'ASK', 'value': 63130.0}]})
-    response = SubscriptionDataResponse()
-    response.msgtype = data[0]
-    subdata = data[1]
-    response.timestamp.FromDatetime(subdata['timestamp'])
-    response.topic = subdata['topic']
-    if subdata.get("validated"):
-        response.validated = subdata["validated"]
-    if subdata.get("terminated"):
-        response.terminated = subdata["terminated"]
-    for price in subdata.get('prices', []):
-        success = True
-        fieldDataMsg = SubFieldData()
-        fieldDataMsg.field = price['field']
-        if isinstance(price['value'], (int, float)):
-            fieldDataMsg.value.number_value = price['value']
-        elif isinstance(price['value'], str):
-            fieldDataMsg.value.string_value = price['value']
-        elif isinstance(price['value'], bool):
-            fieldDataMsg.value.bool_value = price['value']
-        elif isinstance(price['value'], datetime.datetime):
-            fieldDataMsg.value.number_value = price['value'].timestamp()
-        elif isinstance(price['value'], datetime.time):
-            success = False
-        else:
-            success = False
-        if success:
-            response.fields.append(fieldDataMsg)
-
-    return response
 
 
 

@@ -19,6 +19,7 @@ import asyncio
 import threading
 import grpc
 import bloomberg_pb2
+from bloomberg_pb2 import msgType, topicType, Field
 import bloomberg_pb2_grpc
 import random
 from pathlib import Path
@@ -42,11 +43,6 @@ from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
         RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS, 
         MAX_MESSAGE_LENGTH, 
         PONG_SECONDS_TIMEOUT)
-
-TTYPETICKER = bloomberg_pb2.Topic.topicType.Value("TICKER")
-TTYPESEDOL = bloomberg_pb2.Topic.topicType.Value("SEDOL1")
-TTYPECUSIP = bloomberg_pb2.Topic.topicType.Value("CUSIP")
-
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -203,10 +199,15 @@ class Bbg:
                               fields = ["LAST_PRICE"], 
                               start = dt.datetime.today() - dt.timedelta(days=365),
                               end = dt.datetime.today(), 
-                              options = None):
+                              options = None) -> bloomberg_pb2.HistoricalDataResponse:
         return self.loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
 
-    async def async_historicalDataRequest(self, topics, fields, start, end, options):
+    async def async_historicalDataRequest(self, 
+                                          topics, 
+                                          fields, 
+                                          start, 
+                                          end, 
+                                          options) -> bloomberg_pb2.HistoricalDataResponse:
         sst = protoTimestamp()
         sst.FromDatetime(start)
         est = protoTimestamp()
@@ -218,17 +219,23 @@ class Bbg:
             end=est
         )
         logger.info(f"Requesting historical data: {hreq}")
-        data = await self.stub.historicalDataRequest(hreq, metadata=[("clientName", self.name)])
+        data = await self.stub.historicalDataRequest(hreq, metadata=[("client", self.name)])
         return data
 
-    def intradayBarRequest(self, topic,
+    def intradayBarRequest(self, 
+                           topic,
                            start = dt.datetime.now() - dt.timedelta(days=3),
                            end = dt.datetime.now(),
                            interval = 1, 
-                           options = None):
+                           options = None) -> bloomberg_pb2.IntradayBarResponse:
         return self.loop_run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
 
-    async def async_intradayBarRequest(self, topic, start, end, interval, options):
+    async def async_intradayBarRequest(self, 
+                                       topic, 
+                                       start, 
+                                       end, 
+                                       interval, 
+                                       options) -> bloomberg_pb2.IntradayBarResponse:
         sst = protoTimestamp()
         sst.FromDatetime(start)
         est = protoTimestamp()
@@ -240,57 +247,57 @@ class Bbg:
             interval=interval
         )
         logger.info(f"Requesting intraday bars: {bareq}")
-        data = await self.stub.intradayBarRequest(bareq, metadata=[("clientName", self.name)])
+        data = await self.stub.intradayBarRequest(bareq, metadata=[("client", self.name)])
         return data
 
-    def subscribe(self, topics, 
-                  fields=["LAST_PRICE"],
-                  ttype=TTYPETICKER,
-                  interval=2, 
-                  handler = None):
-        """ synchronous subscribe method """
+
+    def mtl(self, 
+            topics, 
+            fields=["LAST_PRICE"],
+            topictype=topicType.TICKER,
+            interval=2, 
+            name=makeName(4, 3)) -> bloomberg_pb2.TopicList:
+        """Make a topic list."""
         if not type(topics) == list:
             logger.error("Topics must be a list.")
             return
         if not type(fields) == list:
             logger.error("Fields must be a list.")
             return
-        return self.loop_run_async(self.async_subscribe(topics, fields, ttype, interval, handler))
+        protofields = [Field(name=field) for field in fields]
+        preptopics=[
+            bloomberg_pb2.Topic(
+                topic=topic,
+                fields=protofields,
+                topictype=topictype,
+                interval=interval
+            ) for topic in topics
+        ]
+        return bloomberg_pb2.TopicList(name=name, topics=preptopics)
 
+    def sub(self, topics, handler=None):
+        """ synchronous subscribe method """
+        return self.loop_run_async(self.async_sub(topics, handler))
 
-    async def async_subscribe(self, topics, 
-                              fields,
-                              ttype,
-                              interval, 
-                              handler):
-        subs = bloomberg_pb2.SubscriptionList(
-            topics=[
-                bloomberg_pb2.Topic(
-                    name=t, 
-                    fields = fields,
-                    ttype=ttype, 
-                    interval=interval
-                ) for t in topics
-            ]
-        )
-        stream = self.stub.subscribe(subs, metadata=[("clientName", self.name)])
+    async def async_sub(self, topics, handler):
+        stream = self.stub.sub(topics, metadata=[("client", self.name)])
         self.streams.append(stream)
         self.loop_run_async_nowait(self.streamHandler(stream, handler))
         logger.info("Subscription stream started.")
-        return subs
+        return topics 
 
 
     async def streamHandler(self, stream, handler):
-        async for response in stream:
+        async for topic in stream:
             try:
-                if response.msgtype in (RESP_SUB, RESP_BAR):
-                    self.subsdata[response.topic].append(response)
-                elif response.msgtype in (RESP_STATUS, RESP_ERROR):
-                    self.statusLog.append(response)
+                if topic.msgtype in (msgType.SUBDATA, msgType.BARDATA):
+                    self.subsdata[topic.topic].append(topic)
+                elif topic.msgtype in (msgType.STATUS, msgType.ERROR):
+                    self.statusLog.append(topic)
                 else:
                     pass
                 if handler:
-                    asyncio.run_coroutine_threadsafe(handler.handle(response), self.loop)
+                    asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
                 #if self.done.is_set():
                 #    break
             except asyncio.CancelledError:
@@ -299,6 +306,23 @@ class Bbg:
             except Exception as e:
                 logger.error(f"Error in streamHandler: {e}")
         logger.info("self.done is set. Exiting streamHandler.")
+
+    def unsub(self, topicList):
+        return self.loop_run_async(self.async_unsubscribe(topicList))
+
+
+    async def async_unsub(self, topicList):
+        response = await self.stub.unsub(topicList, metadata=[("client", self.name)])
+        return response
+
+
+    def subscriptionInfo(self) -> bloomberg_pb2.TopicList:
+        return self.loop_run_async(self.async_subscriptionInfo())
+
+    async def async_subscriptionInfo(self):
+        response = await self.stub.subscriptionInfo(empty_pb2.Empty(), metadata=[("client", self.name)])
+        return response
+
 
     def ping(self):
         return self.loop_run_async_nowait(self.async_ping())
@@ -312,7 +336,7 @@ class Bbg:
             try:
                 pong = await self.stub.ping(Ping, 
                                             timeout = PONG_SECONDS_TIMEOUT, 
-                                            metadata=[("clientName", self.name)])
+                                            metadata=[("client", self.name)])
             except grpc.aio.AioRpcError as e:
                 if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                     logger.error("Ping timeout. Closing Bbg session.")
@@ -324,15 +348,6 @@ class Bbg:
                 
         else:
             print("Ping error:", e)
-
-
-    def unsubscribe(self, topics):
-        pass
-
-
-
-    
-
 
 
 class Handler():
@@ -348,7 +363,7 @@ class Handler():
     async def handle(self, response):
         # this function must be present in any handler
         try:
-            if response.msgtype in (RESP_SUB, RESP_BAR):
+            if response.msgtype in (msgType.SUBDATA, msgType.BARDATA):
                 self.statusLog.append(response)
                 console.print(f"[{self.colour}]{response}[/{self.colour}]")
             else:
@@ -357,51 +372,6 @@ class Handler():
         except Exception as e:
             print(f"Error in handler: {e}")
 
-
-def syncmain():
-    bbg = Bbg(
-        grpchost=args.grpchost,
-        grpcport=args.grpcport,
-        grpckeyport=args.grpckeyport,
-        handler_class = Handler  # Optional handler class that will run in addition to defaul handler
-    )
-
-    # Request historical data
-    hist = bbg.historicalDataRequest(
-        ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
-        ["PX_LAST", "CUR_MKT_CAP"],
-        dt.datetime(2023, 11, 28),
-        dt.datetime(2023, 11, 30)
-    )
-    print(hist)
-
-    # Request intraday bars
-    intra = bbg.intradayBarRequest(topic = "USDZAR Curncy",
-        start = dt.datetime(2024, 10, 28, 6, 0),
-        end = dt.datetime.now(),
-        interval = 1
-    )
-    print(intra)
-
-    # Request intraday bars
-    intra = bbg.intradayBarRequest(topic = "EURCZK Curncy",
-        start = dt.datetime.now() - dt.timedelta(days=3),
-        end = dt.datetime.now(),
-        interval = 1
-    )
-    print(intra)
-
-    subs = bbg.subscribe(["USDZAR Curncy"])
-
-    IPython.embed()
-
-    return bbg
-
-
-def checkThreads():
-    for th in threading.enumerate(): 
-        if not th.name == "MainThread":
-            console.print(f"[bold magenta]Thread {th.name} is still running[/bold magenta]")
 
 if __name__ == "__main__":
     # TODO move certs into another class
@@ -436,11 +406,13 @@ if __name__ == "__main__":
             )
             print(intra)
 
-            handler_zar = Handler("green")
-            subs = bbg.subscribe(["USDZAR Curncy"], handler = handler_zar)
+            handler_eth = Handler("green")
+            subs = bbg.mtl(["XETUSD Curncy"])
+            bbg.sub(subs, handler = handler_eth)
 
-            handler_eur = Handler("blue")
-            subs = bbg.subscribe(["EURCZK Curncy"], handler = handler_eur)
+            handler_btc = Handler("blue")
+            subs = bbg.mtl(["XBTUSD Curncy"])
+            bbg.sub(subs, handler = handler_btc)
 
             IPython.embed()
         except KeyboardInterrupt:

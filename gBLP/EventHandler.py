@@ -7,6 +7,11 @@ import logging
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+from bloomberg_pb2 import IntradayBarResponse
+from bloomberg_pb2 import Topic
+from bloomberg_pb2 import Field
+from bloomberg_pb2 import msgType
+from google.protobuf.struct_pb2 import Value
 
 from rich.console import Console; console = Console() 
 
@@ -19,7 +24,7 @@ class EventHandler(object):
         self.parent = parent
 
     def multisend(self, cid, sendmsg):
-        q = self.parent.correlators[cid]
+        q = self.parent.correlators[cid][0] 
         self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
 
     def getTimeStamp(self):
@@ -56,7 +61,8 @@ class EventHandler(object):
             else:
                 sendmsg = None
             if sendmsg:
-                self.multisend(cid, sendmsg)
+                breakpoint()
+            #    self.multisend(cid, sendmsg)
 
     def searchMsg(self, msg, fields):
         return [{"field": field, "value": msg[field]} 
@@ -99,12 +105,20 @@ class EventHandler(object):
             # subscription --->
             elif msgtype == blpapi.Name("MarketDataEvents"):
                 # mktdata event type
-                sendmsg = (RESP_SUB, 
-                       {"timestamp": timestampdt, 
-                       "topic": cid,
-                       "prices": self.searchMsg(msg, DEFAULT_FIELDS)})
-                # now get all the queues that needs this message
-                self.multisend(cid, sendmsg)
+                topic = Topic()
+                topic.CopyFrom(self.parent.correlators[cid][1])
+                topic.timestamp.FromDatetime(timestampdt)
+                topic.msgtype = msgType.SUBDATA
+                for f in topic.fields:
+                    if msg.hasElement(f.name):
+                        msgval = msg.getElement(f.name).toPy()
+                        if isinstance(msgval, float) or isinstance(msgval, int):
+                            f.value.number_value = msgval
+                        elif isinstance(msgval, str):
+                            f.value.string_value = msgval
+                        else:
+                            f.value.string_value = str(msgval)
+                self.multisend(cid, topic)
 
             # something else --->
             else:
