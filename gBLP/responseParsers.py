@@ -8,7 +8,6 @@ from bloomberg_pb2 import (
     IntradayBarResponseItem,
     IntradayBarData,
     Topic,
-    Field
 )
 
 
@@ -108,7 +107,6 @@ def buildHistoricalDataResponse(data):
         # Append to items
         response.items.append(responseItem)
     return response
-
 
 
 

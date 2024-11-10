@@ -40,7 +40,6 @@ from bloomberg_pb2 import TopicList
 from bloomberg_pb2 import Topic
 from bloomberg_pb2 import Ping 
 from bloomberg_pb2 import Pong 
-from bloomberg_pb2 import msgType
 from bloomberg_pb2 import topicType
 
 from bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
@@ -67,7 +66,7 @@ from util.ConnectionAndAuthOptions import \
     addConnectionAndAuthOptions, \
     createSessionOptions
 
-from EventHandler import EventHandler
+from EventRouter import EventRouter
 
 from util.certMaker import get_conf_dir, make_client_certs, make_all_certs
 from util.utils import makeName
@@ -310,7 +309,7 @@ class SessionRunner(object):
         # setup the correct options
         sessionOptions = createSessionOptions(globalOptions) 
         sessionOptions.setMaxEventQueueSize(self.maxEventQueueSize)
-        self.handler = EventHandler(parent = self)
+        self.handler = EventRouter(parent = self)
         if self.numDispatcherThreads > 1:
             self.eventDispatcher = blpapi.EventDispatcher(numDispatcherThreads=self.numDispatcherThreads) 
             self.eventDispatcher.start()
@@ -389,7 +388,7 @@ class SessionRunner(object):
 
     def makeCorrelatorString(self, topic: Topic, service) -> str:
         intervalstr = f"interval={int(topic.interval)}"
-        fieldsstr = ",".join([f.name for f in topic.fields])
+        fieldsstr = ",".join(topic.fields)
         topicTypeName = topicType.Name(topic.topictype) # SEDOL1/TICKER/CUSIP etc
         substring = f"{service}/{topicTypeName}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
         return substring

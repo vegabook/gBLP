@@ -31,18 +31,6 @@ service Bbg {
 
 /////////////// Subscription /////////////////
 
-
-enum msgType {
-  UNKNOWN = 0;
-  INFO = 1;
-  REFDATA = 2;
-  SUBDATA = 3;
-  BARDATA = 4;
-  STATUS = 5;
-  ERROR = 6;
-  ACK = 7;
-}
-
 enum topicType {
   NONE = 0;
   TICKER = 1;
@@ -50,23 +38,31 @@ enum topicType {
   CUSIP = 3;
 }
 
-
-message Field {
+message FieldVal {
   string name = 1;
   google.protobuf.Value val = 2;
+  string valtype = 3;
 }
 
+message FieldVals {
+  repeated FieldVal vals = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message Status {
+  string message = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
 
 message Topic {
   string topic = 1;
   topicType topictype = 2; 
   int32 interval = 3;
-  msgType msgtype = 4;
-  google.protobuf.Timestamp timestamp = 5;   
-  repeated Field fields = 6;
-  google.protobuf.Any status = 7;
-  bool validated = 8;
-  bool terminated = 9;
+  repeated string fields = 4;
+  oneof data {
+    FieldVals fieldvals = 5;
+    Status status = 6;
+  }
 }
 
 message TopicList {

@@ -19,7 +19,7 @@ import asyncio
 import threading
 import grpc
 import bloomberg_pb2
-from bloomberg_pb2 import msgType, topicType, Field
+from bloomberg_pb2 import topicType
 import bloomberg_pb2_grpc
 import random
 from pathlib import Path
@@ -39,10 +39,12 @@ from rich.console import Console; console = Console()
 #from rich.traceback import install; install()
 from google.protobuf import empty_pb2
 
-from constants import (RESP_INFO, RESP_REF, RESP_SUB, RESP_BAR,
-        RESP_STATUS, RESP_ERROR, RESP_ACK, DEFAULT_FIELDS, 
-        MAX_MESSAGE_LENGTH, 
-        PONG_SECONDS_TIMEOUT)
+from constants import (
+    MAX_MESSAGE_LENGTH, 
+    PONG_SECONDS_TIMEOUT,
+    DEFAULT_FIELDS,
+    ALL_FIELDS
+)
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -78,7 +80,6 @@ class Bbg:
 
         # setup dictionaries for subscription data
         self.subsdata = defaultdict(lambda: deque(maxlen = maxdDequeSize)) # store subscription data
-        self.statusLog = [] # store status messages
 
         # Start the event loop in a separate thread
         self.loop = asyncio.new_event_loop()
@@ -253,7 +254,7 @@ class Bbg:
 
     def mtl(self, 
             topics, 
-            fields=["LAST_PRICE"],
+            fields=DEFAULT_FIELDS,
             topictype=topicType.TICKER,
             interval=2, 
             name=makeName(4, 3)) -> bloomberg_pb2.TopicList:
@@ -264,11 +265,10 @@ class Bbg:
         if not type(fields) == list:
             logger.error("Fields must be a list.")
             return
-        protofields = [Field(name=field) for field in fields]
         preptopics=[
             bloomberg_pb2.Topic(
                 topic=topic,
-                fields=protofields,
+                fields=fields,
                 topictype=topictype,
                 interval=interval
             ) for topic in topics
@@ -290,12 +290,8 @@ class Bbg:
     async def streamHandler(self, stream, handler):
         async for topic in stream:
             try:
-                if topic.msgtype in (msgType.SUBDATA, msgType.BARDATA):
-                    self.subsdata[topic.topic].append(topic)
-                elif topic.msgtype in (msgType.STATUS, msgType.ERROR):
-                    self.statusLog.append(topic)
-                else:
-                    pass
+                self.subsdata[topic.topic].append(topic)
+                # TODO 
                 if handler:
                     asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
                 #if self.done.is_set():
@@ -357,18 +353,12 @@ class Handler():
 
     def __init__(self, colour = "blue"):
         self.mysubsdata = defaultdict(lambda: deque(maxlen = 1000))
-        self.statusLog = deque(maxlen = 1000)
         self.colour = colour
     
     async def handle(self, response):
         # this function must be present in any handler
         try:
-            if response.msgtype in (msgType.SUBDATA, msgType.BARDATA):
-                self.statusLog.append(response)
-                console.print(f"[{self.colour}]{response}[/{self.colour}]")
-            else:
-                self.mysubsdata[response.topic].append(response)
-                console.print(f"[magenta]{response}[/magenta]")   
+            console.print(f"[{self.colour}]{response}[/{self.colour}]")
         except Exception as e:
             print(f"Error in handler: {e}")
 
@@ -407,11 +397,11 @@ if __name__ == "__main__":
             print(intra)
 
             handler_eth = Handler("green")
-            subs = bbg.mtl(["XETUSD Curncy"])
+            subs = bbg.mtl(["XETUSD Curncy"]) 
             bbg.sub(subs, handler = handler_eth)
 
             handler_btc = Handler("blue")
-            subs = bbg.mtl(["XBTUSD Curncy"])
+            subs = bbg.mtl(["XBTUSD Curncy"], ALL_FIELDS)
             bbg.sub(subs, handler = handler_btc)
 
             IPython.embed()
