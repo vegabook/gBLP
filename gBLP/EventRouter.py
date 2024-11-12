@@ -4,6 +4,7 @@ import blpapi
 import datetime as dt
 import time
 import logging
+import sys
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -84,7 +85,10 @@ class EventRouter(object):
         if msg.hasElement("DATE_TIME"):
             timestamp = protoTimestamp()
             timestamp.FromDatetime(msg["DATE_TIME"])
-            barvals.servertimestamp.CopyFrom(timestamp)
+            barvals.timestamp.CopyFrom(timestamp)
+        servertimestamp = protoTimestamp()
+        servertimestamp.FromDatetime(dt.datetime.now())
+        barvals.servertimestamp.CopyFrom(servertimestamp)
         msgtype = msg.messageType()
         if msgtype == blpapi.Name("MarketBarUpdate"):
             barvals.bartype = barType.MARKETBARUPDATE
@@ -95,6 +99,48 @@ class EventRouter(object):
         elif msgtype == blpapi.Name("MarketBarIntervalEnd"):
             barvals.bartype = barType.MARKETBARINTERVALEND
         return barvals
+
+    def makeTickMessage(self, msg):
+        fieldVals = FieldVals()
+        fieldVals.servertimestamp.FromDatetime(timestampdt)
+        # now iterate over the msg fields and add to the FieldVals
+        yesfield = False
+        for field in topic.fields:
+            if msg.hasElement(field):
+                yesfield = True
+                fieldVal = FieldVal(name=field)
+                msgval = msg.getElement(field).toPy()
+                if isinstance(msgval, float) or isinstance(msgval, int):
+                    fieldVal.val.number_value = msgval
+                    fieldVal.valtype = "number"
+                elif isinstance(msgval, str):
+                    fieldVal.val.string_value = msgval
+                    fieldVal.valtype = "string"
+                elif isinstance(msgval, bool):
+                    fieldVal.val.bool_value = msgval
+                    fieldVal.valtype = "bool"
+                elif isinstance(msgval, dt.datetime):
+                    timestamp = protoTimestamp()
+                    timestamp.FromDatetime(msgval)
+                    fieldVal.valtype = "datetime"
+                    fieldVal.val.number_value = timestamp.ToSeconds()
+                elif isinstance(msgval, dt.date):
+                    timestamp = protoTimestamp()
+                    timestamp.FromDatetime(dt.datetime.combine(msgval, dt.time(0, 0)))
+                    fieldVal.valtype = "date_zero_time_added"
+                    fieldVal.val.number_value = timestamp.ToSeconds()
+                elif isinstance(msgval, dt.time):
+                    today = dt.date.today()
+                    timestamp = protoTimestamp()
+                    timestamp.FromDatetime(dt.datetime.combine(today, msgval))
+                    fieldVal.valtype = "time_today_date_added"
+                    fieldVal.val.number_value = timestamp.ToSeconds()
+                else:
+                    fieldVal.val.string_value = str(msgval)
+                if msgval is not None:
+                    fieldVals.vals.append(fieldVal)
+        return (yesfield, fieldVals)
+        # add the FieldVals to the topic
 
 
     def processSubscriptionDataEvent(self, event):
@@ -123,45 +169,7 @@ class EventRouter(object):
                 topic = Topic()
                 topic.CopyFrom(self.parent.correlators[cid]["topic"])
                 # create a FieldVals array and set its timestamp
-                fieldVals = FieldVals()
-                fieldVals.servertimestamp.FromDatetime(timestampdt)
-                # now iterate over the msg fields and add to the FieldVals
-                yesfield = False
-                for field in topic.fields:
-                    if msg.hasElement(field):
-                        yesfield = True
-                        fieldVal = FieldVal(name=field)
-                        msgval = msg.getElement(field).toPy()
-                        if isinstance(msgval, float) or isinstance(msgval, int):
-                            fieldVal.val.number_value = msgval
-                            fieldVal.valtype = "number"
-                        elif isinstance(msgval, str):
-                            fieldVal.val.string_value = msgval
-                            fieldVal.valtype = "string"
-                        elif isinstance(msgval, bool):
-                            fieldVal.val.bool_value = msgval
-                            fieldVal.valtype = "bool"
-                        elif isinstance(msgval, dt.datetime):
-                            timestamp = protoTimestamp()
-                            timestamp.FromDatetime(msgval)
-                            fieldVal.valtype = "datetime"
-                            fieldVal.val.number_value = timestamp.ToSeconds()
-                        elif isinstance(msgval, dt.date):
-                            timestamp = protoTimestamp()
-                            timestamp.FromDatetime(dt.datetime.combine(msgval, dt.time(0, 0)))
-                            fieldVal.valtype = "date_zero_time_added"
-                            fieldVal.val.number_value = timestamp.ToSeconds()
-                        elif isinstance(msgval, dt.time):
-                            today = dt.date.today()
-                            timestamp = protoTimestamp()
-                            timestamp.FromDatetime(dt.datetime.combine(today, msgval))
-                            fieldVal.valtype = "time_today_date_added"
-                            fieldVal.val.number_value = timestamp.ToSeconds()
-                        else:
-                            fieldVal.val.string_value = str(msgval)
-                        if msgval is not None:
-                            fieldVals.vals.append(fieldVal)
-                # add the FieldVals to the topic
+                fieldsvals, yesfield = self.makeTickMessage(msg)
                 if yesfield:
                     topic.fieldvals.CopyFrom(fieldVals)
                     self.multisend(cid, topic)
@@ -177,6 +185,8 @@ class EventRouter(object):
     def processEvent(self, event, _session):
         """ event processing selector """
         try:
+            print(".", end="")
+            sys.stdout.flush()
             match event.eventType():
                 case blpapi.Event.PARTIAL_RESPONSE:
                     self.processResponseEvent(event, True)

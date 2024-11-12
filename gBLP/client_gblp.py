@@ -376,6 +376,20 @@ class Handler():
             print(f"Error in handler: {e}")
 
 
+class HandlerTime():
+    async def handle(self, response):
+        if response.HasField("fieldvals"):
+            for fv in response.fieldvals.vals :
+                if fv.name == "LAST_PRICE_TIME_TODAY_REALTIME":
+                    print(response.fieldvals.servertimestamp.seconds - fv.val.number_value)
+
+class HandlerTimeBars():
+    async def handle(self, response):
+        if response.HasField("barvals"):
+            if response.barvals.HasField("timestamp"):
+                print(response.barvals.servertimestamp.seconds - response.barvals.timestamp.seconds)
+
+
 if __name__ == "__main__":
     # TODO move certs into another class
     if args.delcerts:
@@ -409,28 +423,70 @@ if __name__ == "__main__":
             )
             print(intra)
 
-            #handler_eth = Handler("blue")
-            #subs = bbg.mtl(["XETUSD Curncy"], ALL_FIELDS)
-            #bbg.sub(subs, handler = handler_eth)
 
-            handler_btc = Handler("white")
-            subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], ["LAST_PRICE"], bar=False, interval = 1)
+            handler1 = Handler("white")
+            subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
+            #bbg.sub(subs1, handler = handler1)
 
-            handler_btc = Handler("red")
-            subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], ["LAST_PRICE"], bar=True, interval = 1)
+            handler2 = Handler("red")
+            subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
+            #bbg.sub(subs2, handler = handler2)
 
-            handler_btc = Handler("blue")
-            subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], ["LAST_PRICE"], bar=False, interval = 1)
-            bbg.sub(subs1, handler = handler_btc)
-            bbg.sub(subs2, handler = handler_btc)
-            bbg.sub(subs3, handler = handler_btc)
+            handler3 = Handler("blue")
+            subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
+            #bbg.sub(subs3, handler = handler3)
+
+            fx = [
+                "EURUSD Curncy",
+                "USDJPY Curncy",
+                "GBPUSD Curncy",
+                "AUDUSD Curncy",
+                "USDCAD Curncy",
+                "USDCHF Curncy",
+                "NZDUSD Curncy",
+                "EURGBP Curncy",
+                "EURJPY Curncy",
+                "EURAUD Curncy",
+                "EURCAD Curncy",
+                "EURCHF Curncy",
+                "GBPJPY Curncy",
+                "GBPAUD Curncy",
+                "GBPCAD Curncy",
+                "GBPCHF Curncy",
+                "AUDJPY Curncy",
+                "AUDNZD Curncy",
+                "AUDCAD Curncy",
+                "AUDCHF Curncy",
+                "CADJPY Curncy",
+                "CADCHF Curncy",
+                "NZDJPY Curncy",
+                "NZDCAD Curncy",
+                "NZDCHF Curncy",
+                "USDSGD Curncy",
+                "USDHKD Curncy",
+                "USDCNY Curncy",
+                "EURNZD Curncy",
+                "EURSGD Curncy"
+            ]
+            handler4 = HandlerTime()
+            subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
+            #bbg.sub(subs4, handler = handler4)
+
+            import csv
+            with open("/home/tbrowne/scratch/cusip.csv") as f:
+                reader = csv.reader(f)
+                tickers = [x[1] + " Corp" for x in list(reader)]
+            subtickers = tickers[-2000:]
+            handler5 = HandlerTimeBars()
+            subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
+            bbg.sub(subs5, handler = handler5)
+
+
 
             IPython.embed()
         except KeyboardInterrupt:
             print("Keyboard interrupt")
         finally:
             pass
-
-
 
 

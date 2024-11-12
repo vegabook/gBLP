@@ -427,7 +427,7 @@ class SessionRunner(object):
                                            "clientid": clientid}  
             logger.info(f"Subscribing {substring} for {clientid}")
         if barsublist.size() > 0:
-            self.session.subscribe(bbgsublist)
+            self.session.subscribe(barsublist)
         if ticksublist.size() > 0:
             self.session.subscribe(ticksublist)
         return True
@@ -454,9 +454,9 @@ class SessionRunner(object):
             logger.info(f"Unsubscribing {substring}")
             correlid = blpapi.CorrelationId(substring)
             bbgunsublist = blpapi.SubscriptionList()
-            bbgunsublist.add(substring, correlationId=correlid)
+            #bbgunsublist.add(substring, correlationId=correlid)
+            bbgunsublist.add(correlid)
         if bbgunsublist.size() > 0:
-            breakpoint()
             self.session.unsubscribe(bbgunsublist)
 
 
