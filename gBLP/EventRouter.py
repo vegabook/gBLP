@@ -23,7 +23,7 @@ class EventRouter(object):
         self.parent = parent
 
     def multisend(self, cid, sendmsg):
-        q = self.parent.correlators[cid][0] 
+        q = self.parent.correlators[cid]["q"]
         self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
 
     def getTimeStamp(self):
@@ -45,17 +45,20 @@ class EventRouter(object):
         timestamp = self.getTimeStamp()
         timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         for msg in event:
-            console.print(f"[light blue]{msg}[/light blue]")
             pymsg = msg.toPy()
             cid = msg.correlationId().value()
             msgtype = str(msg.messageType())
             topic = Topic()
-            topic.CopyFrom(self.parent.correlators[cid][1])
+            topic.CopyFrom(self.parent.correlators[cid]["topic"])
             status = Status()
-            status.timestamp.FromDatetime(timestampdt)
+            status.servertimestamp.FromDatetime(timestampdt)
             status.message = msgtype
             topic.status.CopyFrom(status)
             self.multisend(cid, topic)
+            # now erase from correlators if there was a subscription failure
+            if msgtype == "SubscriptionFailure":
+                del self.parent.correlators[cid]
+            logger.info(f"Subscription status: {msgtype} for cid {cid}")
 
     def searchMsg(self, msg, fields):
         return [{"field": field, "value": msg[field]} 
@@ -81,7 +84,7 @@ class EventRouter(object):
         if msg.hasElement("DATE_TIME"):
             timestamp = protoTimestamp()
             timestamp.FromDatetime(msg["DATE_TIME"])
-            barvals.timestamp.CopyFrom(timestamp)
+            barvals.servertimestamp.CopyFrom(timestamp)
         msgtype = msg.messageType()
         if msgtype == blpapi.Name("MarketBarUpdate"):
             barvals.bartype = barType.MARKETBARUPDATE
@@ -109,7 +112,7 @@ class EventRouter(object):
                            blpapi.Name("MarketBarEnd"),
                            blpapi.Name("MarketBarIntervalEnd")):
                 topic = Topic()
-                topic.CopyFrom(self.parent.correlators[cid][1])
+                topic.CopyFrom(self.parent.correlators[cid]["topic"])
                 barvals = self.makeBarMessage(msg) 
                 topic.barvals.CopyFrom(barvals)
                 self.multisend(cid, topic)
@@ -118,13 +121,15 @@ class EventRouter(object):
             elif msgtype == blpapi.Name("MarketDataEvents"):
                 # make a copy of the topic
                 topic = Topic()
-                topic.CopyFrom(self.parent.correlators[cid][1])
+                topic.CopyFrom(self.parent.correlators[cid]["topic"])
                 # create a FieldVals array and set its timestamp
                 fieldVals = FieldVals()
-                fieldVals.timestamp.FromDatetime(timestampdt)
+                fieldVals.servertimestamp.FromDatetime(timestampdt)
                 # now iterate over the msg fields and add to the FieldVals
+                yesfield = False
                 for field in topic.fields:
                     if msg.hasElement(field):
+                        yesfield = True
                         fieldVal = FieldVal(name=field)
                         msgval = msg.getElement(field).toPy()
                         if isinstance(msgval, float) or isinstance(msgval, int):
@@ -157,8 +162,9 @@ class EventRouter(object):
                         if msgval is not None:
                             fieldVals.vals.append(fieldVal)
                 # add the FieldVals to the topic
-                topic.fieldvals.CopyFrom(fieldVals)
-                self.multisend(cid, topic)
+                if yesfield:
+                    topic.fieldvals.CopyFrom(fieldVals)
+                    self.multisend(cid, topic)
             # something else --->
             else:
                 logger.warning(f"Unknown message type {msgtype}")

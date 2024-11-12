@@ -62,7 +62,7 @@ enum barType {
 
 message FieldVals {
   repeated FieldVal vals = 1;
-  google.protobuf.Timestamp timestamp = 2;
+  google.protobuf.Timestamp servertimestamp = 2;
 }
 
 message BarVals {
@@ -73,32 +73,32 @@ message BarVals {
   int32 volume = 5;
   int32 numEvents = 6;
   float value = 7;
-  google.protobuf.Timestamp timestamp = 8;
+  google.protobuf.Timestamp servertimestamp = 8;
   barType bartype = 9;
 }
 
 message Status {
   string message = 1;
-  google.protobuf.Timestamp timestamp = 2;
+  google.protobuf.Timestamp servertimestamp = 2;
 }
 
 message Topic {
   string topic = 1;
   topicType topictype = 2; 
-  int32 interval = 3;
-  repeated string fields = 4;
+  subscriptionType subtype = 3;
+  int32 interval = 4;
+  repeated string fields = 5;
   oneof data {
-    FieldVals fieldvals = 5;
-    BarVals barvals = 6;
-    Status status = 7;
+    FieldVals fieldvals = 6;
+    BarVals barvals = 7;
+    Status status = 8;
   }
 }
 
 
 message TopicList {
-  string name = 1;
+  string tlid = 1;
   repeated Topic topics = 2;
-  subscriptionType subtype = 3;
 }
 
 

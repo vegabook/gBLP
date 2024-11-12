@@ -36,8 +36,8 @@ from bloomberg_pb2 import HistoricalDataRequest
 from bloomberg_pb2 import HistoricalDataResponse
 from bloomberg_pb2 import IntradayBarRequest
 from bloomberg_pb2 import IntradayBarResponse
-from bloomberg_pb2 import TopicList
 from bloomberg_pb2 import Topic
+from bloomberg_pb2 import TopicList
 from bloomberg_pb2 import Ping 
 from bloomberg_pb2 import Pong 
 from bloomberg_pb2 import topicType
@@ -54,6 +54,7 @@ from responseParsers import (
 
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
+from google.protobuf import empty_pb2
 # import value
 
 from argparse import ArgumentParser, RawTextHelpFormatter
@@ -337,7 +338,9 @@ class SessionRunner(object):
         self.alive = False
         logger.info(f"Bloomberg session closed")
 
-    async def historicalDataRequest(self, request: HistoricalDataRequest, q: asyncio.Queue) -> list:
+    async def historicalDataRequest(self, request: HistoricalDataRequest, 
+                                    q: asyncio.Queue,
+                                    clientid: string) -> list:
         """ request historical data """
         logger.info(f"Requesting historical data {request}")
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
@@ -353,14 +356,18 @@ class SessionRunner(object):
                            "endDate": dtend} # TODO OVERRIDES
         bbgRequest.fromPy(requestDict)
         # create a random 32-character string as the correlationId
-        corrString = f"hist:{q.client}:{makeName(alphaLength = 32, digitLength = 0)}"
+        corrString = f"hist:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
-        self.correlators[corrString] = (q, request)
+        self.correlators[corrString] = {"q": q,
+                                       "request": request, 
+                                       "clientid": clientid}
         self.session.sendRequest(bbgRequest, correlationId=correlid)
 
 
-    async def intradayBarRequest(self, request: IntradayBarRequest, q: asyncio.Queue) -> IntradayBarResponse:
+    async def intradayBarRequest(self, request: IntradayBarRequest, 
+                                 q: asyncio.Queue,
+                                 clientid: string) -> IntradayBarResponse:
         """ request intraday bar data """
         logger.info(f"Requesting intraday bar data {request}")
         success, bbgRequest = self._createEmptyRequest("IntradayBarRequest")
@@ -377,10 +384,12 @@ class SessionRunner(object):
                        "interval": request.interval} # TODO OVERRIDES
         bbgRequest.fromPy(requestDict)
         # create a random 32-character string as the correlationId
-        corrString = f"bar:{q.client}:{makeName(alphaLength = 32, digitLength = 0)}"
+        corrString = f"bar:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
-        self.correlators[corrString] = (q, request)
+        self.correlators[corrString] = {"q": q,
+                                       "request": request, 
+                                       "clientid": clientid}
         self.session.sendRequest(bbgRequest, correlationId=correlid)
 
 
@@ -395,50 +404,59 @@ class SessionRunner(object):
         return substring
 
     async def sub(self, topicList: TopicList, 
-                        subq: asyncio.Queue) -> bool:
+                        subq: asyncio.Queue, 
+                        clientid: string) -> bool:
         """ subscribe to a list of topics """
         
         # make sure the service is open
-        if topicList.subtype == subscriptionType.BAR:
-            success, service = self._getService("BarSubscribe")
-        else:
-            success, service = self._getService("Subscribe")
-        if not success:
-            return false
-        bbgsublist = blpapi.SubscriptionList()
+        _success, barservice = self._getService("BarSubscribe")
+        _success, tickservice = self._getService("Subscribe")
+        barsublist = blpapi.SubscriptionList()
+        ticksublist = blpapi.SubscriptionList()
         for t in topicList.topics:
-            substring = self.makeCorrelatorString(t, service)
-            correlid = blpapi.CorrelationId(substring)
-            bbgsublist.add(substring, correlationId=correlid)
-            self.correlators[substring] = (subq, t)
-        if bbgsublist.size() > 0:
+            if t.subtype == subscriptionType.BAR:
+                substring = self.makeCorrelatorString(t, barservice)
+                correlid = blpapi.CorrelationId(substring)
+                barsublist.add(substring, correlationId=correlid)
+            else:
+                substring = self.makeCorrelatorString(t, tickservice)
+                correlid = blpapi.CorrelationId(substring)
+                ticksublist.add(substring, correlationId=correlid)
+            self.correlators[substring] = {"q": subq, 
+                                           "topic": t, 
+                                           "clientid": clientid}  
+            logger.info(f"Subscribing {substring} for {clientid}")
+        if barsublist.size() > 0:
             self.session.subscribe(bbgsublist)
+        if ticksublist.size() > 0:
+            self.session.subscribe(ticksublist)
         return True
 
-    async def subscriptionInfo(self, client) -> TopicList:
+    async def subscriptionInfo(self, clientid) -> TopicList:
         """ get the current subscription list """
-        clientname = client.split(":")[0]
-        slist = TopicList()
-        for k, v in self.correlators.items():
-            if v[0].client.split(":")[0] == clientname:
-                slist.topics.append(v[1])
-        return slist
+        tl = TopicList()
+        for v in self.correlators.values():
+            if v["clientid"] == clientid:
+                tl.topics.append(v["topic"])
+        return tl
 
 
     async def unsub(self, topicList: TopicList):
         """ unsubscribe from a list of topics """
-        if topicList.subtype == subscriptionType.BAR:
-            success, service = self._getService("BarSubscribe")
-        else:
-            success, service = self._getService("Subscribe")
-        if not success:
-            return false
+        _success, barservice = self._getService("BarSubscribe")
+        _success, tickservice = self._getService("Subscribe")
         for t in topicList.topics:
+            if t.subtype == subscriptionType.BAR:
+                service = self.servicesOpen["BarSubscribe"]
+            else:
+                service = self.servicesOpen["Subscribe"]
             substring = self.makeCorrelatorString(t, service)
             logger.info(f"Unsubscribing {substring}")
             correlid = blpapi.CorrelationId(substring)
             bbgunsublist = blpapi.SubscriptionList()
             bbgunsublist.add(substring, correlationId=correlid)
+        if bbgunsublist.size() > 0:
+            breakpoint()
             self.session.unsubscribe(bbgunsublist)
 
 
@@ -473,12 +491,11 @@ class Bbg(BbgServicer):
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
-        client = self.makeClientID(context)
-        logger.info(f"Received historical data request {request} from {client}")
+        clientid = self.makeClientID(context)
+        logger.info(f"Received historical data request {request} from {clientid}")
         q = asyncio.Queue()
-        q.client = client
         messageList = []
-        await self.session.historicalDataRequest(request, q)
+        await self.session.historicalDataRequest(request, q, clientid)
         while True:
             msg = await q.get()
             messageList.append(msg[1]["data"])
@@ -493,12 +510,11 @@ class Bbg(BbgServicer):
 
     async def intradayBarRequest(self, request: IntradayBarRequest,
                                   context: grpc.aio.ServicerContext) -> IntradayBarResponse:
-        client = self.makeClientID(context)
-        logger.info(f"Received intraday bar request {request} from {client}")
+        clientid = self.makeClientID(context)
+        logger.info(f"Received intraday bar request {request} from {clientid}")
         q = asyncio.Queue()
-        q.client = client
         messageList = []
-        await self.session.intradayBarRequest(request, q)
+        await self.session.intradayBarRequest(request, q, clientid)
         while True:
             msg = await q.get()
             messageList.append(msg[1]["data"])
@@ -512,11 +528,10 @@ class Bbg(BbgServicer):
 
 
     async def sub(self, topicList: TopicList, context: grpc.aio.ServicerContext):
-        client = self.makeClientID(context)
-        logger.info(f"Subscribing {topicList} for {client}")
+        """subscribe""" 
+        clientid = self.makeClientID(context)
         subq = asyncio.Queue()
-        subq.client = client
-        success = await self.session.sub(topicList, subq)
+        success = await self.session.sub(topicList, subq, clientid)
         if not success:
             context.abort(grpc.StatusCode.NOT_FOUND, "Failed to subscribe")
         while not done.is_set():
@@ -525,7 +540,7 @@ class Bbg(BbgServicer):
             try:
                 msg = await subq.get() 
             except asyncio.CancelledError:
-                self.session.unsub(topicList)
+                await self.session.unsub(topicList)
                 logger.info("Subscription stream cancelled")
                 break
             except Exception as e:
@@ -536,17 +551,19 @@ class Bbg(BbgServicer):
 
 
     async def unsub(self, topicList: TopicList, context: grpc.aio.ServicerContext):
-        client = self.makeClientID(context)
-        logger.info(f"Unsubscribing {topicList} for {client}")
+        clientid = self.makeClientID(context)
+        logger.info(f"Unsubscribing {topicList} for {clientid}")
         await self.session.unsub(topicList)
+        return empty_pb2.Empty()
 
 
     async def subscriptionInfo(self, _request, 
                                context: grpc.aio.ServicerContext) -> TopicList:
-        client = self.makeClientID(context)
-        logger.info(f"Received subscription info request from {client}")
-        slist = await self.session.subscriptionInfo(client)
-        return slist
+        clientid = self.makeClientID(context)
+        logger.info(f"Received subscription info request from {clientid}")
+        tlist = await self.session.subscriptionInfo(clientid)
+        return tlist
+
 
 
     async def close(self):
@@ -557,13 +574,11 @@ async def keypressDetector():
     while not done.is_set():
         # Offload the blocking part to a different thread
         key = await asyncio.to_thread(check_keypress)
-        
         if key == b'q':
             print("Q pressed")
             done.set()
         elif key == b't':
             printThreads()
-
         await asyncio.sleep(0.1)
     logger.info("Keypress detector stopped.")
 

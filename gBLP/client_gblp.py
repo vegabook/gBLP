@@ -20,6 +20,7 @@ import threading
 import grpc
 import bloomberg_pb2
 from bloomberg_pb2 import topicType
+from bloomberg_pb2 import subscriptionType
 import bloomberg_pb2_grpc
 import random
 from pathlib import Path
@@ -256,9 +257,7 @@ class Bbg:
             fields=DEFAULT_FIELDS,
             topictype=topicType.TICKER,
             interval=2, 
-            name=makeName(4, 3), 
             bar=False) -> bloomberg_pb2.TopicList:
-        # TODO implement bar here and not in barsub
         """Make a topic list."""
         if not type(topics) == list:
             logger.error("Topics must be a list.")
@@ -266,16 +265,22 @@ class Bbg:
         if not type(fields) == list:
             logger.error("Fields must be a list.")
             return
+        if bar:
+            subtype = subscriptionType.BAR
+        else:
+            subtype = subscriptionType.TICK
         preptopics=[
             bloomberg_pb2.Topic(
                 topic=topic,
                 fields=fields,
                 topictype=topictype,
                 interval=interval,
+                subtype=subtype
             ) for topic in topics
         ]
+        randomname = makeName(alphaLength=6, digitLength=3)
         subtype = bloomberg_pb2.subscriptionType.BAR if bar else bloomberg_pb2.subscriptionType.TICK
-        return bloomberg_pb2.TopicList(name=name, topics=preptopics, subtype=subtype)
+        return bloomberg_pb2.TopicList(tlid=randomname, topics=preptopics)
 
     def sub(self, topics, handler=None):
         """ synchronous subscribe method """
@@ -306,7 +311,7 @@ class Bbg:
         logger.info("self.done is set. Exiting streamHandler.")
 
     def unsub(self, topicList):
-        return self.loop_run_async(self.async_unsubscribe(topicList))
+        return self.loop_run_async(self.async_unsub(topicList))
 
 
     async def async_unsub(self, topicList):
@@ -364,9 +369,8 @@ class Handler():
                 console.print(f"[magenta]{response.status}[/magenta]")
             elif response.HasField("barvals"):
                 if response.barvals.bartype != bloomberg_pb2.barType.MARKETBARUPDATE:
-                    console.print(f"[{self.colour}]Intraday bar: {response.barvals}[/{self.colour}]")
+                    console.print(f"[{self.colour}]Intraday bar: {response}[/{self.colour}]")
             else:
-                console.print(f"[{self.colour}]Bar: {response.bar}[/{self.colour}]")
                 console.print(f"[{self.colour}]{response}[/{self.colour}]")
         except Exception as e:
             print(f"Error in handler: {e}")
@@ -409,9 +413,17 @@ if __name__ == "__main__":
             #subs = bbg.mtl(["XETUSD Curncy"], ALL_FIELDS)
             #bbg.sub(subs, handler = handler_eth)
 
-            handler_btc = Handler("yellow")
-            subs = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], ["LAST_PRICE"], bar=True, interval = 5)
-            bbg.sub(subs, handler = handler_btc)
+            handler_btc = Handler("white")
+            subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], ["LAST_PRICE"], bar=False, interval = 1)
+
+            handler_btc = Handler("red")
+            subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], ["LAST_PRICE"], bar=True, interval = 1)
+
+            handler_btc = Handler("blue")
+            subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], ["LAST_PRICE"], bar=False, interval = 1)
+            bbg.sub(subs1, handler = handler_btc)
+            bbg.sub(subs2, handler = handler_btc)
+            bbg.sub(subs3, handler = handler_btc)
 
             IPython.embed()
         except KeyboardInterrupt:
