@@ -21,6 +21,7 @@ import grpc
 import bloomberg_pb2
 from bloomberg_pb2 import topicType
 from bloomberg_pb2 import subscriptionType
+from bloomberg_pb2 import allBbgFields
 import bloomberg_pb2_grpc
 import random
 from pathlib import Path
@@ -43,8 +44,9 @@ from constants import (
     MAX_MESSAGE_LENGTH, 
     PONG_SECONDS_TIMEOUT,
     DEFAULT_FIELDS,
-    ALL_FIELDS
 )
+
+ALL_FIELDS = allBbgFields.keys()
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -94,10 +96,12 @@ class Bbg:
         asyncio.set_event_loop(loop)
         loop.run_until_complete(self.done.wait())
         logger.info("start_loop exiting after done.set()")
+        self.close()
 
 
     def loop_run_async(self, coro):
         """Schedules a coroutine to be run on the event loop."""
+        print("running asynci!", coro)
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
         return future.result()  # Waits until the coroutine is done and returns the result
 
@@ -139,11 +143,32 @@ class Bbg:
         self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
 
         
+    #async def close_channel(self):
+    #    """Close the gRPC channel asynchronously."""
+    #    if self.channel:
+    #        await self.channel.close()
+    #        logger.info("Channel closed.")
+
     async def close_channel(self):
-        """Close the gRPC channel asynchronously."""
+        """Close the gRPC channel asynchronously if it’s open."""
+        print("yebo")
         if self.channel:
-            await self.channel.close()
-            logger.info("Channel closed.")
+            # Check the connectivity state to see if closing will block
+            console.print("[red]Checking channel state...[/red]")
+            state = self.channel._channel.check_connectivity_state(try_to_connect=False)
+            console.print(f"[red]Channel state: {state}[/red]")
+            if state in (grpc.ChannelConnectivity.SHUTDOWN, grpc.ChannelConnectivity.TRANSIENT_FAILURE):
+                logger.info("Channel already closed or in a non-recoverable state.")
+                return
+            
+            # Attempt to close if it's not already in shutdown state
+            try:
+                await self.channel.close()
+                logger.info("Channel closed.")
+            except Exception as e:
+                logger.error(f"Error closing channel: {e}")
+        else:
+            logger.info("Channel already closed.")
 
 
     def close(self):
@@ -151,12 +176,12 @@ class Bbg:
         while len(self.streams) > 0:
             stream = self.streams.pop()
             stream.cancel()
-        logger.info("Closing channel")
-        self.loop_run_async(self.close_channel())
         logger.info("Setting done event")
         self.done.set()
-        logger.info("Joining thread")
-        self.thread.join()
+        #logger.info("Closing channel")
+        #self.loop_run_async(self.close_channel())
+        #logger.info("Joining thread")
+        #self.thread.join()
         logger.info("Thread joined. Exiting close.")
 
 
@@ -327,30 +352,28 @@ class Bbg:
         return response
 
 
-    def ping(self):
-        return self.loop_run_async_nowait(self.async_ping())
-
-
-    async def async_ping(self):
-        while not self.done.is_set():
-            nowstamp = protoTimestamp()
-            nowstamp.GetCurrentTime()
-            Ping = bloomberg_pb2.Ping(timestamp=nowstamp)
-            try:
-                pong = await self.stub.ping(Ping, 
-                                            timeout = PONG_SECONDS_TIMEOUT, 
-                                            metadata=[("client", self.name)])
-            except grpc.aio.AioRpcError as e:
-                if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-                    logger.error("Ping timeout. Closing Bbg session.")
-                    self.close()
-                    break
-                else:
-                    logger.error("Ping error:", e)
-            await asyncio.sleep(1)
+    #def ping(self):
+    #    return self.loop_run_async(self.async_ping())
+#
+#
+#    async def async_ping(self):
+#        while not self.done.is_set():
+#            nowstamp = protoTimestamp()
+#            nowstamp.GetCurrentTime()
+#            Ping = bloomberg_pb2.Ping(timestamp=nowstamp)
+#            try:
+#                pong = await self.stub.ping(Ping, 
+#                                            timeout = PONG_SECONDS_TIMEOUT, 
+#                                            metadata=[("client", self.name)])
+#                await asyncio.sleep(1)
+#            except grpc.aio.AioRpcError as e:
+#                if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+#                    logger.error("Ping timeout.")
+#                    self.done.set()
+#                else:
+#                    logger.error("Ping error:", e)
+#        logger.info("Exiting async_ping.")
                 
-        else:
-            print("Ping error:", e)
 
 
 class Handler():
@@ -398,7 +421,6 @@ if __name__ == "__main__":
     else:
         try:
             bbg = Bbg()
-            pong = bbg.ping() # start by pinging
             hist = bbg.historicalDataRequest(
                 ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
                 ["PX_LAST", "CUR_MKT_CAP"],
@@ -424,9 +446,8 @@ if __name__ == "__main__":
             print(intra)
 
 
-            handler1 = Handler("white")
             subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-            #bbg.sub(subs1, handler = handler1)
+            bbg.sub(subs1)
 
             handler2 = Handler("red")
             subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
@@ -476,10 +497,10 @@ if __name__ == "__main__":
             with open("/home/tbrowne/scratch/cusip.csv") as f:
                 reader = csv.reader(f)
                 tickers = [x[1] + " Corp" for x in list(reader)]
-            subtickers = tickers[-2000:]
+            subtickers = tickers[-10:]
             handler5 = HandlerTimeBars()
             subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
-            bbg.sub(subs5, handler = handler5)
+            #bbg.sub(subs5)
 
 
 

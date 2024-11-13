@@ -100,14 +100,16 @@ class EventRouter(object):
             barvals.bartype = barType.MARKETBARINTERVALEND
         return barvals
 
-    def makeTickMessage(self, msg):
+    def makeTickMessage(self, msg, topic):
+        timestamp = self.getTimeStamp()
+        timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         fieldVals = FieldVals()
         fieldVals.servertimestamp.FromDatetime(timestampdt)
         # now iterate over the msg fields and add to the FieldVals
-        yesfield = False
+        yesfoundfields = False
         for field in topic.fields:
             if msg.hasElement(field):
-                yesfield = True
+                yesfoundfields = True
                 fieldVal = FieldVal(name=field)
                 msgval = msg.getElement(field).toPy()
                 if isinstance(msgval, float) or isinstance(msgval, int):
@@ -139,7 +141,7 @@ class EventRouter(object):
                     fieldVal.val.string_value = str(msgval)
                 if msgval is not None:
                     fieldVals.vals.append(fieldVal)
-        return (yesfield, fieldVals)
+        return (yesfoundfields, fieldVals)
         # add the FieldVals to the topic
 
 
@@ -147,8 +149,6 @@ class EventRouter(object):
         """ 
         process subsription data message and put on queue
         """
-        timestamp = self.getTimeStamp()
-        timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         for msg in event:
             cid = msg.correlationId().value()
             # bars --->
@@ -169,8 +169,8 @@ class EventRouter(object):
                 topic = Topic()
                 topic.CopyFrom(self.parent.correlators[cid]["topic"])
                 # create a FieldVals array and set its timestamp
-                fieldsvals, yesfield = self.makeTickMessage(msg)
-                if yesfield:
+                yesfoundfields, fieldVals = self.makeTickMessage(msg, topic)
+                if yesfoundfields:
                     topic.fieldvals.CopyFrom(fieldVals)
                     self.multisend(cid, topic)
             # something else --->

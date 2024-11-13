@@ -481,14 +481,6 @@ class Bbg(BbgServicer):
     async def closeSession(self):
         await self.session.close()
 
-
-    async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
-        nowstamp = protoTimestamp()
-        nowstamp.GetCurrentTime()
-        pong = Pong(timestamp=nowstamp)
-        return pong
-
-
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
         clientid = self.makeClientID(context)
