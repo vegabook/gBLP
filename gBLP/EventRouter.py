@@ -5,6 +5,7 @@ import datetime as dt
 import time
 import logging
 import sys
+import json
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ from bloomberg_pb2 import IntradayBarResponse
 from bloomberg_pb2 import Topic
 from bloomberg_pb2 import FieldVal, FieldVals, Status
 from bloomberg_pb2 import BarVals, barType
+from bloomberg_pb2 import Status, statusType
 from google.protobuf.struct_pb2 import Value
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 
@@ -23,9 +25,15 @@ class EventRouter(object):
     def __init__(self, parent):
         self.parent = parent
 
-    def multisend(self, cid, sendmsg):
-        q = self.parent.correlators[cid]["q"]
+    def simplesend(self, cid, sendmsg):
+        # send to one queue
+        correlator = self.parent.correlators.get(cid)
+        if not correlator:
+            logger.warning(f"Correlator {cid} not found")
+            return
+        q = correlator["q"]
         self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
+
 
     def getTimeStamp(self):
         return time.strftime("%Y-%m-%d %H:%M:%S")
@@ -37,38 +45,51 @@ class EventRouter(object):
                         f"partial {partial}"))
             sendmsg = ("ref", {"cid": cid, "partial": partial, "data": msg.toPy()})
             # now put message into correct asyncio queue. Ceremony here is because we're calling async from sync
-            self.multisend(cid, sendmsg)
+            self.simplesend(cid, sendmsg)
             if not partial:   # then we're done with this so deleate the correlator entry
                 del self.parent.correlators[cid]
 
+
+    def makeStatusMessage(self, msg, topic):
+        timestamp = self.getTimeStamp()
+        timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+        fieldVals = FieldVals()
+        fieldVals.servertimestamp.FromDatetime(timestampdt)
+        status = Status()
+        status.statustype = statusType.Value(str(msg.messageType()))
+        status.servertimestamp.FromDatetime(timestampdt)
+        status.jsondetails = json.dumps(msg.toPy())
+        return status
+            
 
     def processSubscriptionStatus(self, event):
         timestamp = self.getTimeStamp()
         timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         for msg in event:
-            pymsg = msg.toPy()
             cid = msg.correlationId().value()
-            msgtype = str(msg.messageType())
             topic = Topic()
             topic.CopyFrom(self.parent.correlators[cid]["topic"])
-            status = Status()
-            status.servertimestamp.FromDatetime(timestampdt)
-            status.message = msgtype
-            topic.status.CopyFrom(status)
-            self.multisend(cid, topic)
+            topic.status.CopyFrom(self.makeStatusMessage(msg, topic))
             # now erase from correlators if there was a subscription failure
-            if msgtype == "SubscriptionFailure":
-                #del self.parent.correlators[cid]
-                console.print(f"[red]Subscription status: {msgtype}, \nmsg: {msg} for cid {cid}[/red]")
-            elif msgtype == "SubscriptionTerminated":
-                console.print(f"[magenta]Subscription status: {msgtype}, \nmsg: {msg} for cid {cid}[/magenta]")
-            elif msgtype == "SubscriptionLost":
-                console.print(f"[yellow]Subscription status: {msgtype}, \nmsg: {msg} for cid {cid}[/yellow]")
-            logger.info(f"Subscription status: {msgtype} for cid {cid}")
+            match topic.status.statustype:
+                case statusType.SubscriptionFailure:
+                    del self.parent.correlators[cid]
+                case statusType.SubscriptionTerminated:
+                    del self.parent.correlators[cid]
+            logger.info(f"Received subscription status: {topic}")
+            self.simplesend(cid, topic)
 
-    def searchMsg(self, msg, fields):
-        return [{"field": field, "value": msg[field]} 
-                for field in fields if msg.hasElement(field)]
+
+    def processMiscEvents(self, event):
+        console.print(f"[bold green]Processing miscellaneous events[/bold green]")
+        timestamp = self.getTimeStamp()
+        timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+        for msg in event:
+            topic = Topic()
+            topic.status.CopyFrom(self.makeStatusMessage(msg, topic))
+            logger.info(f"Received miscellaneous status: {topic}")
+
+
 
     def makeBarMessage(self, msg):
         """ make a bar message """
@@ -166,7 +187,7 @@ class EventRouter(object):
                 topic.CopyFrom(self.parent.correlators[cid]["topic"])
                 barvals = self.makeBarMessage(msg) 
                 topic.barvals.CopyFrom(barvals)
-                self.multisend(cid, topic)
+                self.simplesend(cid, topic)
 
             # subscription --->
             elif msgtype == blpapi.Name("MarketDataEvents"):
@@ -177,15 +198,10 @@ class EventRouter(object):
                 yesfoundfields, fieldVals = self.makeTickMessage(msg, topic)
                 if yesfoundfields:
                     topic.fieldvals.CopyFrom(fieldVals)
-                    self.multisend(cid, topic)
+                    self.simplesend(cid, topic)
             # something else --->
             else:
                 logger.warning(f"!!!!!!!!!!!!!!!! Unknown message type {msgtype}") # DEBUG
-
-    def processMiscEvents(self, event):
-        for msg in event:
-            logger.info(f"NO CLUE MISC!!!!!!!!! Received message {msg.messageType()}") # DEBUG
-            sendmsg = ("status", str(msg.messageType()))
 
 
     def processEvent(self, event, _session):

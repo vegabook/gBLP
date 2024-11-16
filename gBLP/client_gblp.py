@@ -22,6 +22,7 @@ import bloomberg_pb2
 from bloomberg_pb2 import topicType
 from bloomberg_pb2 import subscriptionType
 from bloomberg_pb2 import allBbgFields
+from bloomberg_pb2 import statusType
 import bloomberg_pb2_grpc
 import random
 from pathlib import Path
@@ -40,6 +41,7 @@ import IPython
 from queue import Queue
 from rich.console import Console; console = Console()
 from google.protobuf import empty_pb2
+import json
 
 from constants import (
     MAX_MESSAGE_LENGTH, 
@@ -114,7 +116,6 @@ class Bbg:
 
     def loop_run_async(self, coro):
         """Schedules a coroutine to be run on the event loop."""
-        print("running asynci!", coro)
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
         return future.result()  # Waits until the coroutine is done and returns the result
 
@@ -166,12 +167,11 @@ class Bbg:
             stream.cancel()
             time.sleep(0.5)
         logger.info("Setting done event")
-        #self.done.set()
         self.loop.call_soon_threadsafe(self.done.set)
-        time.sleep(1.5)
+        time.sleep(0.5)
         logger.info("closing channel")
         self.loop.call_soon_threadsafe(self.channel.close())
-        time.sleep(1.5)
+        time.sleep(0.5)
         logger.info("Thread joined. Exiting close.")
 
 
@@ -349,7 +349,6 @@ class Bbg:
         async for topic in stream:
             try:
                 self.subsdata[topic.topic].append(topic)
-                # TODO 
                 if handler:
                     asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
                 #if self.done.is_set():
@@ -415,13 +414,11 @@ class HandlerStatusDot():
     async def handle(self, response):
         # this function must be present in any handler
         try:
-            if response.HasField("status"):
-                console.print(f"[magenta]{response.status}[/magenta]")
-            else:
-                print(".", end="")
-                sys.stdout.flush()
+            console.print(f"[bold blue].{response.status}[/bold blue]", end="")
+            sys.stdout.flush()
         except Exception as e:
             print(f"Error in handler: {e}")
+
 class HandlerTime():
     async def handle(self, response):
         if response.HasField("fieldvals"):
@@ -473,19 +470,14 @@ if __name__ == "__main__":
             subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
             bbg.sub(subs1, handler = handler1)
 
-            time.sleep(10)
-            print("Unsubscribing")
-            bbg.unsub(subs1)
-            time.sleep(10)
-            print("exiting")
 
             handler2 = Handler("red")
             subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
-            #bbg.sub(subs2, handler = handler2)
+            bbg.sub(subs2, handler = handler2)
 
             handler3 = Handler("blue")
             subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
-            #bbg.sub(subs3, handler = handler3)
+            bbg.sub(subs3, handler = handler3)
 
             fx = [
                 "EURUSD Curncy",
@@ -521,19 +513,25 @@ if __name__ == "__main__":
             ]
             handler4 = HandlerTime()
             subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
-            #bbg.sub(subs4, handler = handler4)
+            bbg.sub(subs4, handler = handler4)
 
             import csv
             with open("/home/tbrowne/scratch/cusip.csv") as f:
                 reader = csv.reader(f)
                 tickers = [x[1] + " Corp" for x in list(reader)]
-            subtickers = tickers[-2000:]
+            subtickers = tickers[-100:]
             handler5 = HandlerTimeBars()
             subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
             #bbg.sub(subs5)
 
-
-
+            time.sleep(10)
+            bbg.unsub(subs1)
+            time.sleep(3)
+            bbg.unsub(subs2)
+            time.sleep(3)
+            bbg.unsub(subs3)
+            time.sleep(3)
+            bbg.unsub(subs4)
             bbg.close()
         except KeyboardInterrupt:
             print("Keyboard interrupt")
