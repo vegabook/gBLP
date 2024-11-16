@@ -412,8 +412,8 @@ class SessionRunner(object):
         topicTypeName = topicType.Name(topic.topictype) # SEDOL1/TICKER/CUSIP etc
         substring = f"{service}/{topicTypeName}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
         substring = f"{service}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
-        
-        return substring
+        correlstring = f"{topicTypeName}_{topic.topic}_{fieldsstr}_{intervalstr}"
+        return (correlstring, substring)
 
     async def sub(self, topicList: TopicList, 
                         subq: asyncio.Queue, 
@@ -427,14 +427,11 @@ class SessionRunner(object):
         ticksublist = blpapi.SubscriptionList()
         for t in topicList.topics:
             if t.subtype == subscriptionType.BAR:
-                substring = self.makeCorrelatorString(t, barservice)
-                #correlid = blpapi.CorrelationId(substring) # DEBUG
-                correlid = blpapi.CorrelationId(makeName(alphaLength = 32, digitLength = 0)) # DEBUG
+                correlstring, substring = self.makeCorrelatorString(t, barservice)
+                correlid = blpapi.CorrelationId(correlstring)
                 barsublist.add(substring, correlationId=correlid)
             else:
-                substring = self.makeCorrelatorString(t, tickservice)
-                #correlid = blpapi.CorrelationId(substring) # DEBUG
-                correlstring = makeName(alphaLength = 32, digitLength = 0) # DEBUG
+                correlstring, substring = self.makeCorrelatorString(t, tickservice)
                 correlid = blpapi.CorrelationId(correlstring) # DEBUG
                 ticksublist.add(substring, correlationId=correlid)
             self.correlators[correlstring] = {"q": subq, 
@@ -471,12 +468,12 @@ class SessionRunner(object):
                 service = self.servicesOpen["BarSubscribe"]
             else:
                 service = self.servicesOpen["Subscribe"]
-            substring = self.makeCorrelatorString(t, service)
+            correlstring, substring = self.makeCorrelatorString(t, service)
             logger.info(f"Unsubscribing {substring}")
-            correlid = list(filter(lambda x: x["substring"] == substring, self.correlators.values()))[0]["correlid"]
+            #correlid = list(filter(lambda x: x["substring"] == substring, self.correlators.values()))[0]["correlid"]
+            correlid = self.correlators[correlstring]["correlid"]
             bbgunsublist = blpapi.SubscriptionList()
             bbgunsublist.add(substring, correlationId=correlid) # DEBUG
-            #bbgunsublist.add(substring, correlationId=correlid) # DEBUG
             logger.info(f"Unsubscribing {bbgunsublist.size()} topics") # DEBUG
             self.session.unsubscribe(bbgunsublist)
 
