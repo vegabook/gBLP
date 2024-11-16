@@ -396,8 +396,10 @@ class Handler():
             elif response.HasField("barvals"):
                 if response.barvals.bartype != bloomberg_pb2.barType.MARKETBARUPDATE:
                     console.print(f"[{self.colour}]Intraday bar: {response}[/{self.colour}]")
+            elif response.HasField("fieldvals"):
+                console.print(f"[green]{response}[/green]")
             else:
-                console.print(f"[{self.colour}]{response}[/{self.colour}]")
+                console.print(f"[cyan]{response}[/cyan]")
         except Exception as e:
             print(f"Error in handler: {e}")
 
@@ -524,15 +526,16 @@ if __name__ == "__main__":
             subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
             #bbg.sub(subs5)
 
-            time.sleep(10)
-            bbg.unsub(subs1)
-            time.sleep(3)
-            bbg.unsub(subs2)
-            time.sleep(3)
-            bbg.unsub(subs3)
-            time.sleep(3)
-            bbg.unsub(subs4)
-            bbg.close()
+            #time.sleep(10)
+            #bbg.unsub(subs1)
+            #time.sleep(3)
+            #bbg.unsub(subs2)
+            #time.sleep(3)
+            #bbg.unsub(subs3)
+            #time.sleep(3)
+            #bbg.unsub(subs4)
+            #bbg.close()
+            IPython.embed()
         except KeyboardInterrupt:
             print("Keyboard interrupt")
         finally:
