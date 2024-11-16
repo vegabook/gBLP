@@ -413,7 +413,7 @@ class SessionRunner(object):
         substring = f"{service}/{topicTypeName}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
         substring = f"{service}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
         correlstring = f"{topicTypeName}_{topic.topic}_{fieldsstr}_{intervalstr}"
-        return (correlstring, substring)
+        return (substring, substring)
 
     async def sub(self, topicList: TopicList, 
                         subq: asyncio.Queue, 
