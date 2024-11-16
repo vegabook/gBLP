@@ -79,8 +79,9 @@ message BarVals {
 }
 
 message Status {
-  string message = 1;
+  statusType statustype = 1;
   google.protobuf.Timestamp servertimestamp = 2;
+  string jsondetails = 3;
 }
 
 message Topic {
@@ -271,7 +272,6 @@ enum allBbgFields {
     SMART_FIELDS_METADATA_VERSION_RT = 30;
     IS_DELAYED_STREAM = 31;
     ID_BB_SEC_NUM_SRC = 32;
-    LAST_PRICE = 33;
     BID = 34;
     ASK = 35;
     HIGH = 36;
@@ -387,4 +387,52 @@ enum allBbgFields {
     LAST_BID_TIME_TODAY_REALTIME = 146;
     LAST_ASK_TIME_TODAY_REALTIME = 147;
     LAST_PRICE_TIME_TODAY_REALTIME = 148;
+}
+
+enum statusType {
+    AuthorizationFailure = 0;
+    AuthorizationRevoked = 1;
+    AuthorizationSuccess = 2;
+    DataLoss = 3;
+    PermissionRequest = 4;
+    PermissionResponse = 5;
+    RequestFailure = 6;
+    RequestTemplateAvailable = 7;
+    RequestTemplatePending = 8;
+    RequestTemplateTerminated = 9;
+    ResolutionFailure = 10;
+    ResolutionSuccess = 11;
+    ServiceAvailabilityInfo = 12;
+    ServiceDeregistered = 13;
+    ServiceDown = 14;
+    ServiceOpened = 15;
+    ServiceOpenFailure = 16;
+    ServiceRegistered = 17;
+    ServiceRegisterFailure = 18;
+    ServiceUp = 19;
+    SessionClusterInfo = 20;
+    SessionClusterUpdate = 21;
+    SessionConnectionDown = 22;
+    SessionConnectionUp = 23;
+    SessionStarted = 24;
+    SessionStartupFailure = 25;
+    SessionTerminated = 26;
+    SlowConsumerWarning = 27;
+    SlowConsumerWarningCleared = 28;
+    SubscriptionFailure = 29;
+    SubscriptionStarted = 30;
+    SubscriptionStreamsActivated = 31;
+    SubscriptionStreamsDeactivated = 32;
+    SubscriptionTerminated = 33;
+    TokenGenerationFailure = 34;
+    TokenGenerationSuccess = 35;
+    TopicActivated = 36;
+    TopicCreated = 37;
+    TopicCreateFailure = 38;
+    TopicDeactivated = 39;
+    TopicDeleted = 40;
+    TopicRecap = 41;
+    TopicResubscribed = 42;
+    TopicSubscribed = 43;
+    TopicUnsubscribed = 44;
 }
