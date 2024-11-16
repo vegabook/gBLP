@@ -28,6 +28,7 @@ from pathlib import Path
 import datetime as dt
 import time
 import os
+import sys
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 from util.certMaker import get_conf_dir
 from util.utils import makeName
@@ -46,12 +47,22 @@ from constants import (
     DEFAULT_FIELDS,
 )
 
+# TODO FIRST RELEASE
+# * unsubscribe must work
+# * unsubscribe server on cancel
+# * reference data request
+# * commit, then simplify and lint in new branch
+# TODO FROLLOW UP RELEASE
+# * curve data request
+# * instrument search request
+
+
 ALL_FIELDS = allBbgFields.keys()
 
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--message', default='hello!')
-parser.add_argument('--grpchost', default='localhost')
+parser.add_argument('--grpchost', default='signaliser.com')
 parser.add_argument('--grpcport', default='50051')
 parser.add_argument('--grpckeyport', default='50052')
 parser.add_argument('--delcerts', action='store_true', default=False)
@@ -85,7 +96,10 @@ class Bbg:
 
         # Start the event loop in a separate thread
         self.loop = asyncio.new_event_loop()
-        self.thread = threading.Thread(target=self.start_loop, args=(self.loop,), daemon=False)
+        self.thread = threading.Thread(target=self.start_loop, 
+                                       args=(self.loop,), 
+                                       daemon=False,
+                                       name="grpc_thread")
         self.thread.start()
         # Run asynchronous initialization in the event loop
         self.loop_run_async(self.connect())
@@ -96,7 +110,6 @@ class Bbg:
         asyncio.set_event_loop(loop)
         loop.run_until_complete(self.done.wait())
         logger.info("start_loop exiting after done.set()")
-        self.close()
 
 
     def loop_run_async(self, coro):
@@ -143,45 +156,22 @@ class Bbg:
         self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
 
         
-    #async def close_channel(self):
-    #    """Close the gRPC channel asynchronously."""
-    #    if self.channel:
-    #        await self.channel.close()
-    #        logger.info("Channel closed.")
 
-    async def close_channel(self):
-        """Close the gRPC channel asynchronously if it’s open."""
-        print("yebo")
-        if self.channel:
-            # Check the connectivity state to see if closing will block
-            console.print("[red]Checking channel state...[/red]")
-            state = self.channel._channel.check_connectivity_state(try_to_connect=False)
-            console.print(f"[red]Channel state: {state}[/red]")
-            if state in (grpc.ChannelConnectivity.SHUTDOWN, grpc.ChannelConnectivity.TRANSIENT_FAILURE):
-                logger.info("Channel already closed or in a non-recoverable state.")
-                return
-            
-            # Attempt to close if it's not already in shutdown state
-            try:
-                await self.channel.close()
-                logger.info("Channel closed.")
-            except Exception as e:
-                logger.error(f"Error closing channel: {e}")
-        else:
-            logger.info("Channel already closed.")
 
 
     def close(self):
-        logger.info("Closing streams")
         while len(self.streams) > 0:
+            logger.info("Cancelling stream")
             stream = self.streams.pop()
             stream.cancel()
+            time.sleep(0.5)
         logger.info("Setting done event")
-        self.done.set()
-        #logger.info("Closing channel")
-        #self.loop_run_async(self.close_channel())
-        #logger.info("Joining thread")
-        #self.thread.join()
+        #self.done.set()
+        self.loop.call_soon_threadsafe(self.done.set)
+        time.sleep(1.5)
+        logger.info("closing channel")
+        self.loop.call_soon_threadsafe(self.channel.close())
+        time.sleep(1.5)
         logger.info("Thread joined. Exiting close.")
 
 
@@ -220,6 +210,15 @@ class Bbg:
         logger.info("Certificates deleted.")
 
 
+    def check_connection(self):
+        """Check the connection status."""
+        state = self.channel.get_state()
+        if state == grpc.ChannelConnectivity.SHUTDOWN:
+            return False
+        else:
+            return False
+
+
     def historicalDataRequest(self, 
                               topics, 
                               fields = ["LAST_PRICE"], 
@@ -247,6 +246,7 @@ class Bbg:
         logger.info(f"Requesting historical data: {hreq}")
         data = await self.stub.historicalDataRequest(hreq, metadata=[("client", self.name)])
         return data
+
 
     def intradayBarRequest(self, 
                            topic,
@@ -319,6 +319,32 @@ class Bbg:
         return topics 
 
 
+#    async def streamHandler(self, stream, handler, timeout=30):
+#        try:
+#            # Wrap the entire for loop with asyncio.wait_for to enforce a timeout on the whole loop
+#            async def loop_body():
+#                async for topic in stream:
+#                    try:
+#                        self.subsdata[topic.topic].append(topic)
+#                        if handler:
+#                            asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
+#                    except asyncio.CancelledError:
+#                        logger.info("streamHandler was cancelled.")
+#                        break
+#                    except Exception as e:
+#                        logger.error(f"Error in streamHandler: {e}")
+#
+#            # Run the loop_body coroutine with a timeout
+#            await asyncio.wait_for(loop_body(), timeout=timeout)
+#
+#        except asyncio.TimeoutError:
+#            logger.warning("streamHandler timed out.")
+#        except asyncio.CancelledError:
+#            logger.info("streamHandler was cancelled.")
+#        finally:
+#            logger.info("self.done is set. Exiting streamHandler.")
+
+
     async def streamHandler(self, stream, handler):
         async for topic in stream:
             try:
@@ -333,7 +359,9 @@ class Bbg:
                 break
             except Exception as e:
                 logger.error(f"Error in streamHandler: {e}")
-        logger.info("self.done is set. Exiting streamHandler.")
+                break
+        logger.info("Exiting streamHandler.")
+
 
     def unsub(self, topicList):
         return self.loop_run_async(self.async_unsub(topicList))
@@ -350,30 +378,6 @@ class Bbg:
     async def async_subscriptionInfo(self):
         response = await self.stub.subscriptionInfo(empty_pb2.Empty(), metadata=[("client", self.name)])
         return response
-
-
-    #def ping(self):
-    #    return self.loop_run_async(self.async_ping())
-#
-#
-#    async def async_ping(self):
-#        while not self.done.is_set():
-#            nowstamp = protoTimestamp()
-#            nowstamp.GetCurrentTime()
-#            Ping = bloomberg_pb2.Ping(timestamp=nowstamp)
-#            try:
-#                pong = await self.stub.ping(Ping, 
-#                                            timeout = PONG_SECONDS_TIMEOUT, 
-#                                            metadata=[("client", self.name)])
-#                await asyncio.sleep(1)
-#            except grpc.aio.AioRpcError as e:
-#                if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-#                    logger.error("Ping timeout.")
-#                    self.done.set()
-#                else:
-#                    logger.error("Ping error:", e)
-#        logger.info("Exiting async_ping.")
-                
 
 
 class Handler():
@@ -399,6 +403,25 @@ class Handler():
             print(f"Error in handler: {e}")
 
 
+class HandlerStatusDot():
+    """ Optional handler class to handle subscription responses. 
+        This must be sent as a class and not as an instance, because it
+        will be instantiated in the Bbg class. """
+
+    def __init__(self, colour = "blue"):
+        self.mysubsdata = defaultdict(lambda: deque(maxlen = 1000))
+        self.colour = colour
+    
+    async def handle(self, response):
+        # this function must be present in any handler
+        try:
+            if response.HasField("status"):
+                console.print(f"[magenta]{response.status}[/magenta]")
+            else:
+                print(".", end="")
+                sys.stdout.flush()
+        except Exception as e:
+            print(f"Error in handler: {e}")
 class HandlerTime():
     async def handle(self, response):
         if response.HasField("fieldvals"):
@@ -412,8 +435,8 @@ class HandlerTimeBars():
             if response.barvals.HasField("timestamp"):
                 print(response.barvals.servertimestamp.seconds - response.barvals.timestamp.seconds)
 
-
 if __name__ == "__main__":
+
     # TODO move certs into another class
     if args.delcerts:
         bbg = Bbg()
@@ -446,8 +469,15 @@ if __name__ == "__main__":
             print(intra)
 
 
+            handler1 = HandlerStatusDot("blue")
             subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-            bbg.sub(subs1)
+            bbg.sub(subs1, handler = handler1)
+
+            time.sleep(10)
+            print("Unsubscribing")
+            bbg.unsub(subs1)
+            time.sleep(10)
+            print("exiting")
 
             handler2 = Handler("red")
             subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
@@ -497,14 +527,14 @@ if __name__ == "__main__":
             with open("/home/tbrowne/scratch/cusip.csv") as f:
                 reader = csv.reader(f)
                 tickers = [x[1] + " Corp" for x in list(reader)]
-            subtickers = tickers[-10:]
+            subtickers = tickers[-2000:]
             handler5 = HandlerTimeBars()
             subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
             #bbg.sub(subs5)
 
 
 
-            IPython.embed()
+            bbg.close()
         except KeyboardInterrupt:
             print("Keyboard interrupt")
         finally:

@@ -78,7 +78,11 @@ from rich.console import Console; console = Console()
 from rich.traceback import install; install()
 
 
-done = asyncio.Event() # signal to stop the subscription stream loop
+
+# ----------------- global variables ----------------------
+
+done = asyncio.Event() # signal to stop everything
+comq = asyncio.Queue() # inward communication queue for the bloomberg session
 
 # logging
 
@@ -274,9 +278,12 @@ class SessionRunner(object):
                               "CategorizedFieldSearchRequest": "//blp/apiflds",
                               "studyRequest": "//blp/tasvc",
                               "SnapshotRequest": "//blp/mktlist"}
-        self.subq = asyncio.Queue()
+        self.subq = asyncio.Queue() # sends messages out back to grpc handler
         self.numDispatcherThreads = 1 # if > 1 then threaded dispatchers will be created
         self.loop = asyncio.get_event_loop() # used by the event handler
+        # start the comq
+        self.comq = comq # global comms queue
+        self.comqTask = asyncio.create_task(self.listen_comq())
         self.open()
 
 
@@ -335,6 +342,9 @@ class SessionRunner(object):
         self.session.stop()
         if self.numDispatcherThreads > 1:
             self.eventDispatcher.stop()
+        if not self.comqTask.done():
+            logger.info("Cancelling comq listener")
+            self.comqTask.cancel()
         self.alive = False
         logger.info(f"Bloomberg session closed")
 
@@ -401,6 +411,8 @@ class SessionRunner(object):
         fieldsstr = ",".join(topic.fields)
         topicTypeName = topicType.Name(topic.topictype) # SEDOL1/TICKER/CUSIP etc
         substring = f"{service}/{topicTypeName}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
+        substring = f"{service}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
+        
         return substring
 
     async def sub(self, topicList: TopicList, 
@@ -416,15 +428,24 @@ class SessionRunner(object):
         for t in topicList.topics:
             if t.subtype == subscriptionType.BAR:
                 substring = self.makeCorrelatorString(t, barservice)
-                correlid = blpapi.CorrelationId(substring)
+                #correlid = blpapi.CorrelationId(substring) # DEBUG
+                correlid = blpapi.CorrelationId(makeName(alphaLength = 32, digitLength = 0)) # DEBUG
                 barsublist.add(substring, correlationId=correlid)
             else:
                 substring = self.makeCorrelatorString(t, tickservice)
-                correlid = blpapi.CorrelationId(substring)
+                #correlid = blpapi.CorrelationId(substring) # DEBUG
+                correlstring = makeName(alphaLength = 32, digitLength = 0) # DEBUG
+                correlid = blpapi.CorrelationId(correlstring) # DEBUG
                 ticksublist.add(substring, correlationId=correlid)
-            self.correlators[substring] = {"q": subq, 
+            self.correlators[correlstring] = {"q": subq, 
                                            "topic": t, 
-                                           "clientid": clientid}  
+                                           "clientid": clientid,
+                                           "correlid": correlid, 
+                                           "substring": substring}
+            #self.correlators[substring] = {"q": subq,     # DEBUG
+                                          # "topic": t, 
+                                          # "clientid": clientid,
+                                          # "correlid": correlid}
             logger.info(f"Subscribing {substring} for {clientid}")
         if barsublist.size() > 0:
             self.session.subscribe(barsublist)
@@ -452,12 +473,43 @@ class SessionRunner(object):
                 service = self.servicesOpen["Subscribe"]
             substring = self.makeCorrelatorString(t, service)
             logger.info(f"Unsubscribing {substring}")
-            correlid = blpapi.CorrelationId(substring)
+            correlid = list(filter(lambda x: x["substring"] == substring, self.correlators.values()))[0]["correlid"]
             bbgunsublist = blpapi.SubscriptionList()
-            #bbgunsublist.add(substring, correlationId=correlid)
-            bbgunsublist.add(correlid)
-        if bbgunsublist.size() > 0:
+            bbgunsublist.add(substring, correlationId=correlid) # DEBUG
+            #bbgunsublist.add(substring, correlationId=correlid) # DEBUG
+            logger.info(f"Unsubscribing {bbgunsublist.size()} topics") # DEBUG
             self.session.unsubscribe(bbgunsublist)
+
+
+    async def listen_comq(self):
+        """ listen for messages from the grpc handler """
+
+        async def comq_timeoutable_listener():
+            msg = await self.comq.get()
+            return msg
+
+        while not done.is_set():
+            try:
+                msg = await asyncio.wait_for(comq_timeoutable_listener(), 0.1)
+            except asyncio.TimeoutError:
+                msg = None
+                continue
+            except asyncio.CancelledError:
+                logger.info("comq listener cancelled. Exiting.")
+                break
+            except Exception as e:
+                logger.error(f"Error in comq listener {e}")
+                break
+            # wrap this in a timeout
+            match msg:
+                case b"c":
+                    console.print(f"[bold cyan]Number of correlators: {len(self.correlators)}")
+                    for k in self.correlators.keys():
+                        console.print(f"[cyan]{k}")
+
+
+            
+
 
 
 
@@ -566,11 +618,14 @@ async def keypressDetector():
     while not done.is_set():
         # Offload the blocking part to a different thread
         key = await asyncio.to_thread(check_keypress)
-        if key == b'q':
-            print("Q pressed")
-            done.set()
-        elif key == b't':
-            printThreads()
+        match key:
+            case b'q':
+                print("Q pressed")
+                done.set()
+            case b't':
+                printThreads()
+            case b'c':
+                await comq.put(b"c")
         await asyncio.sleep(0.1)
     logger.info("Keypress detector stopped.")
 
@@ -578,7 +633,8 @@ async def keypressDetector():
 def check_keypress():
     # This function will be executed in a separate thread
     if msvcrt.kbhit():
-        return msvcrt.getch()
+        key = msvcrt.getch()
+        return key
     return None
 
 def printThreads(id = ""):

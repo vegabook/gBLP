@@ -58,7 +58,12 @@ class EventRouter(object):
             self.multisend(cid, topic)
             # now erase from correlators if there was a subscription failure
             if msgtype == "SubscriptionFailure":
-                del self.parent.correlators[cid]
+                #del self.parent.correlators[cid]
+                console.print(f"[red]Subscription status: {msgtype}, \nmsg: {msg} for cid {cid}[/red]")
+            elif msgtype == "SubscriptionTerminated":
+                console.print(f"[magenta]Subscription status: {msgtype}, \nmsg: {msg} for cid {cid}[/magenta]")
+            elif msgtype == "SubscriptionLost":
+                console.print(f"[yellow]Subscription status: {msgtype}, \nmsg: {msg} for cid {cid}[/yellow]")
             logger.info(f"Subscription status: {msgtype} for cid {cid}")
 
     def searchMsg(self, msg, fields):
@@ -175,10 +180,11 @@ class EventRouter(object):
                     self.multisend(cid, topic)
             # something else --->
             else:
-                logger.warning(f"Unknown message type {msgtype}")
+                logger.warning(f"!!!!!!!!!!!!!!!! Unknown message type {msgtype}") # DEBUG
 
     def processMiscEvents(self, event):
         for msg in event:
+            logger.info(f"NO CLUE MISC!!!!!!!!! Received message {msg.messageType()}") # DEBUG
             sendmsg = ("status", str(msg.messageType()))
 
 
