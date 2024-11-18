@@ -12,8 +12,9 @@ $$\textcolor{JungleGreen}{\rule{120cm}{0.5mm}}$$
 
 
 ## Why?
-* You want to use the Bloomberg API from other languages than python, C++, C#, or Java. Now you can use it from any language that has a gRPC implementation.
-* You want to have a proper, fully featured subscription API in your python or Jupyter repl, that updates in real time.
+* Streaming: a fully featured subscription API in your python or Jupyter repl, that updates in real time.
+* Multi-language: gRPC allows you to use the same API in any language that supports it. 
+* Multi-OS: No more Windows-only (see licence below). 
 
 
 ## Status

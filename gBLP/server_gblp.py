@@ -24,7 +24,6 @@ import datetime as dt
 import os
 import threading
 import signal
-from functools import partial
 import queue
 import blpapi
 import msvcrt
@@ -36,10 +35,10 @@ from bloomberg_pb2 import HistoricalDataRequest
 from bloomberg_pb2 import HistoricalDataResponse
 from bloomberg_pb2 import IntradayBarRequest
 from bloomberg_pb2 import IntradayBarResponse
+from bloomberg_pb2 import ReferenceDataRequest
+from bloomberg_pb2 import ReferenceDataResponse 
 from bloomberg_pb2 import Topic
 from bloomberg_pb2 import TopicList
-from bloomberg_pb2 import Ping 
-from bloomberg_pb2 import Pong 
 from bloomberg_pb2 import topicType
 from bloomberg_pb2 import subscriptionType
 
@@ -50,6 +49,7 @@ from bloomberg_pb2_grpc import add_BbgServicer_to_server, \
 from responseParsers import (
     buildHistoricalDataResponse, 
     buildIntradayBarResponse,
+    buildReferenceDataResponse
 )
 
 from google.protobuf.struct_pb2 import Struct
@@ -76,7 +76,8 @@ from cryptography.hazmat.primitives import serialization, hashes
 
 from rich.console import Console; console = Console()
 from rich.traceback import install; install()
-
+from rich.logging import RichHandler
+from rich.pretty import pprint
 
 
 # ----------------- global variables ----------------------
@@ -88,7 +89,8 @@ comq = asyncio.Queue() # inward communication queue for the bloomberg session
 
 import logging
 logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                    handlers=[RichHandler(rich_tracebacks=True, markup=True)])
 logger = logging.getLogger(__name__)
 
 NUMBER_OF_REPLY = 10
@@ -332,7 +334,6 @@ class SessionRunner(object):
             logger.error("Failed to start session.")
             self.alive = False
         else:
-            logger.info("Session started.")
             self.alive = True
         # return all the details over gRPC
         logger.debug(f"Session opened")
@@ -397,6 +398,28 @@ class SessionRunner(object):
         corrString = f"bar:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
+        self.correlators[corrString] = {"q": q,
+                                       "request": request, 
+                                       "clientid": clientid}
+        self.session.sendRequest(bbgRequest, correlationId=correlid)
+
+
+    async def referenceDataRequest(self, request: ReferenceDataRequest,
+                                   q: asyncio.Queue,
+                                   clientid: string) -> ReferenceDataResponse:
+        """ request reference data """
+        logger.info(f"Requesting reference data {request}")
+        success, bbgRequest = self._createEmptyRequest("ReferenceDataRequest")
+        if not success:
+            return []
+        logger.info(f"setting securities {request.topics}")
+        requestDict = {"securities": request.topics,
+                       "fields": request.fields}
+        if request.overrides:
+            requestDict["overrides"] = request.overrides
+        bbgRequest.fromPy(requestDict)
+        corrString = f"ref:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"
+        correlid = blpapi.CorrelationId(corrString)
         self.correlators[corrString] = {"q": q,
                                        "request": request, 
                                        "clientid": clientid}
@@ -502,12 +525,7 @@ class SessionRunner(object):
 
 
             
-
-
-
-
 # ----------------- multiple sessions are managed here ----------------------
-
 
 class Bbg(BbgServicer):
     # implements all the gRPC methods for the session manager
@@ -559,6 +577,24 @@ class Bbg(BbgServicer):
                 break
         if messageList:
             result = buildIntradayBarResponse(messageList)
+            return result
+        else:
+            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+
+    async def referenceDataRequest(self, request: ReferenceDataRequest,
+                                   context: grpc.aio.ServicerContext) -> ReferenceDataResponse:
+        clientid = self.makeClientID(context)
+        logger.info(f"Received reference data request {request} from {clientid}")
+        q = asyncio.Queue()
+        messageList = []
+        await self.session.referenceDataRequest(request, q, clientid)
+        while True:
+            msg = await q.get() # TODO timeout?
+            messageList.append(msg[1]["data"])
+            if not msg[1]["partial"]:
+                break
+        if messageList:
+            result = buildReferenceDataResponse(messageList)
             return result
         else:
             context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
@@ -636,13 +672,26 @@ def printThreads(id = ""):
         if not th.name == "MainThread":
             console.print(f"[bold magenta]Thread {th.name} is running[/bold magenta]")
 
+
+
 async def main():
     bbgAioServer = grpc.aio.server()
     keyAioServer = grpc.aio.server()
     bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer))
     keyTask = asyncio.create_task(keySession(keyAioServer))
+    console.print(("[bold magenta]This software is provided 'as is', without warranty of any kind, express "
+                  "or implied. The developer of this software assumes no responsibility or "
+                  "liability for any use of the software by any party. It is the sole "
+                  "responsibility of the user to ensure that their use of this software "
+                  "complies with all applicable laws, regulations, and the terms and conditions "
+                  "of the Bloomberg API. By using this software, you acknowledge and agree that "
+                  "the developer shall not be held liable for any consequences arising from the "
+                  "use of this software, including but not limited to, any violations of the "
+                  "Bloomberg API terms."))
+
+    console.print("[bold blue]--------------------------")
     console.print("[bold red on white blink]Press Q to stop the server")
-    console.print("[bold blue]--------------------------------")
+    console.print("[bold blue]--------------------------")
     keypressTask =asyncio.create_task(keypressDetector()) 
     await done.wait()
     logger.info("done waiting for. Stopping gRPC servers...")

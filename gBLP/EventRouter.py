@@ -66,7 +66,7 @@ class EventRouter(object):
         timestamp = self.getTimeStamp()
         timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         for msg in event:
-            cid = msg.correlationId().value()
+            cid = msg.correlationId().value() # TODO put topic into makeStatusMessage (same for others
             topic = Topic()
             topic.CopyFrom(self.parent.correlators[cid]["topic"])
             topic.status.CopyFrom(self.makeStatusMessage(msg, topic))
@@ -76,18 +76,19 @@ class EventRouter(object):
                     del self.parent.correlators[cid]
                 case statusType.SubscriptionTerminated:
                     del self.parent.correlators[cid]
-            logger.info(f"Received subscription status: {topic}")
+            logger.info(f"Received subscription status: {topic.topic} {statusType.Name(topic.status.statustype)}")
             self.simplesend(cid, topic)
 
 
     def processMiscEvents(self, event):
-        console.print(f"[bold green]Processing miscellaneous events[/bold green]")
         timestamp = self.getTimeStamp()
         timestampdt = dt.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         for msg in event:
             topic = Topic()
             topic.status.CopyFrom(self.makeStatusMessage(msg, topic))
-            logger.info(f"Received miscellaneous status: {topic}")
+            statusstr = statusType.Name(topic.status.statustype)
+            console.print(f"[bold green]{statusstr}[/bold green]", end = " ")
+            logger.info(f"Received miscellaneous status: {statusstr}")
 
 
 
@@ -207,7 +208,6 @@ class EventRouter(object):
     def processEvent(self, event, _session):
         """ event processing selector """
         try:
-            print(".", end="")
             sys.stdout.flush()
             match event.eventType():
                 case blpapi.Event.PARTIAL_RESPONSE:

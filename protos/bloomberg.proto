@@ -17,16 +17,13 @@ service KeyManager {
 
 // Bloomberg API session management
 service Bbg {
-  rpc ping(Ping) returns (Pong) {}
-  rpc pong(Pong) returns (Ping) {}
   rpc sub(TopicList) returns (stream Topic) {} 
   rpc unsub(TopicList) returns (google.protobuf.Empty) {}
   rpc subscriptionInfo(google.protobuf.Empty) returns (TopicList) {}
   rpc historicalDataRequest(HistoricalDataRequest) returns (HistoricalDataResponse) {}
   //rpc intradayTickRequest. maybe "tick" or "gblpTick"
   rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
-  //rpc historicalDataRequest "daily"
-  //rpc referenceDataRequest "ref"
+  rpc referenceDataRequest(ReferenceDataRequest) returns (ReferenceDataResponse) {}
 }
 
 /////////////// Subscription /////////////////
@@ -104,36 +101,94 @@ message TopicList {
 }
 
 
-/////////////// Bar Subscription //////////////////
-
 
 /////////////// Reference data //////////////////
 
 //see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p164
 
 message ReferenceDataRequest {
-  repeated string topics = 2; // securities
-  repeated string fields = 3; // fields list
-  map <string, string> options = 4; // overrides
+  repeated string topics = 1; // securities
+  repeated string fields = 2; // fields list
+  map <string, string> overrides = 3; // overrides
 }
 
 
 message ReferenceDataResponse {
-  google.protobuf.Any responseError = 1;
-  repeated ReferenceDataResponseItem items = 2;
+  ErrorInfo responseError = 1;
+  repeated SecurityData securitydata = 2;
 }
 
-message ReferenceDataResponseItem {
-  RefSecurityData security_data = 1;
+
+////////////////////////// Common to all callsData //////////////////////////
+
+// Top-level message containing all security data
+message Response {
+    repeated SecurityData securitydata = 1;
 }
 
-message RefSecurityData {
-  google.protobuf.Any securityError = 1;
-  string security = 2;
-  repeated google.protobuf.Any eid_data = 3;
-  int32 sequence_number = 4;
-  repeated google.protobuf.Any field_exceptions = 5;
- // repeated RefFieldData field_data = 6;
+// Represents data for each security
+message SecurityData {
+    string security = 1;
+    repeated EIDData eidData = 2;
+    repeated FieldException fieldExceptions = 3;
+    int32 sequenceNumber = 4;
+    FieldData fieldData = 5;
+    repeated FieldData timeData = 6;
+    SecurityError securityError = 7;
+}
+
+// Placeholder for EIDData (empty since no data provided)
+message EIDData {}
+
+// Represents exceptions for fields
+message FieldException {
+    string fieldId = 1;
+    ErrorInfo errorInfo = 2;
+}
+
+// Detailed error information
+message ErrorInfo {
+    string source = 1;
+    int32 code = 2;
+    string category = 3;
+    string message = 4;
+    string subcategory = 5;
+}
+
+// Error related to the security itself
+message SecurityError {
+    string source = 1;
+    int32 code = 2;
+    string category = 3;
+    string message = 4;
+    string subcategory = 5;
+}
+
+// Field data with flexible value types
+message FieldData {
+    map<string, Value> fields = 1;
+}
+
+// Represents a value that can be of multiple types
+message Value {
+    oneof kind {
+        double doublevalue = 1;
+        int64 intvalue = 2;
+        string stringvalue = 3;
+        MapValue mapvalue = 4;
+        ListValue listvalue = 5;
+  	google.protobuf.Timestamp timevalue = 6;
+    }
+}
+
+// For nested map values
+message MapValue {
+    map<string, Value> fields = 1;
+}
+
+// For lists of values
+message ListValue {
+    repeated Value values = 1;
 }
 
 
@@ -151,10 +206,6 @@ message IntradayBarRequest {
 
 message IntradayBarResponse {
   google.protobuf.Any responseError = 1;
-  repeated IntradayBarResponseItem items = 2;
-}
-
-message IntradayBarResponseItem {
   repeated IntradayBarData bars = 2;
 }
 
@@ -186,30 +237,8 @@ message HistoricalDataRequest {
 // The top-level response message
 message HistoricalDataResponse {
     // An array of items, each containing security data
-    google.protobuf.Any responseError = 1;
-    repeated HistoricalDataResponseItem items = 2;
-}
-
-// Each item contains security data
-message HistoricalDataResponseItem {
-    SecurityData security_data = 1; // Required
-}
-
-// Security data for a security
-message SecurityData {
-    google.protobuf.Any securityError = 1;
-    string security = 2; // Required
-    repeated google.protobuf.Any eid_data = 3; // Required; items unspecified
-    int32 sequence_number = 4; // Required
-    repeated google.protobuf.Any field_exceptions = 5; // Required; items unspecified
-    repeated FieldData field_data = 6; // Required
-}
-
-// Field data for a date
-
-message FieldData {
-    google.protobuf.Timestamp date = 1; // Required
-    map<string, google.protobuf.Value> fields = 2; // Dynamic fields
+    ErrorInfo responseError = 1;
+    repeated SecurityData securitydata = 2;
 }
 
 
@@ -225,18 +254,8 @@ message KeyResponse {
   bytes cacert = 3;
 }
 
-///////////// ping pong //////////////////
 
-message Ping
-{
-  google.protobuf.Timestamp timestamp = 2;
-}
-
-message Pong
-{
-  google.protobuf.Timestamp timestamp = 2;
-}
-
+///////////// constants //////////////////
 
 enum allBbgFields {
     MKTDATA_EVENT_TYPE = 0;

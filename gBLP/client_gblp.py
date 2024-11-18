@@ -50,12 +50,15 @@ from constants import (
 )
 
 # TODO FIRST RELEASE
-# * unsubscribe must work
-# * unsubscribe server on cancel
 # * reference data request
+# * response errors check ("Any? acceptable?") FieldExceptions?
+# * camelcase subscription proto fields consistency
+# * consider moving subscription message response parsers out of the router and into the responseParsers
 # * commit, then simplify and lint in new branch
+# * check UTC status (recall reference data request must have UTC TRUE specified)
 # TODO FROLLOW UP RELEASE
 # * curve data request
+# * intraday tick request
 # * instrument search request
 
 
@@ -219,6 +222,7 @@ class Bbg:
             return False
 
 
+
     def historicalDataRequest(self, 
                               topics, 
                               fields = ["LAST_PRICE"], 
@@ -248,6 +252,7 @@ class Bbg:
         return data
 
 
+
     def intradayBarRequest(self, 
                            topic,
                            start = dt.datetime.now() - dt.timedelta(days=3),
@@ -275,6 +280,27 @@ class Bbg:
         logger.info(f"Requesting intraday bars: {bareq}")
         data = await self.stub.intradayBarRequest(bareq, metadata=[("client", self.name)])
         return data
+
+
+    def referenceDataRequest(self,
+                             topics,
+                             fields,
+                             overrides = None) -> bloomberg_pb2.ReferenceDataResponse:
+        return self.loop_run_async(self.async_referenceDataRequest(topics, fields, overrides))
+
+    async def async_referenceDataRequest(self,
+                                         topics,
+                                         fields,
+                                         overrides) -> bloomberg_pb2.ReferenceDataResponse:
+        refreq = bloomberg_pb2.ReferenceDataRequest(
+            topics=topics,
+            fields=fields,
+            overrides=overrides
+        )
+        logger.info(f"Requesting reference data: {refreq}")
+        data = await self.stub.referenceDataRequest(refreq, metadata=[("client", self.name)])
+        return data
+
 
 
     def mtl(self, 
@@ -443,6 +469,11 @@ if __name__ == "__main__":
     else:
         try:
             bbg = Bbg()
+
+            ref = bbg.referenceDataRequest(topics = ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy", "WACKO Zillion", 
+                                                     "YCGT0018 Index"], 
+                                           fields = ["PX_LAST", "CUR_MKT_CAP", "INDX_MEMBERS", "NAME", "CURVE_MEMBERS"])
+
             hist = bbg.historicalDataRequest(
                 ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
                 ["PX_LAST", "CUR_MKT_CAP"],
@@ -466,6 +497,8 @@ if __name__ == "__main__":
                 interval = 1
             )
             print(intra)
+
+            IPython.embed()
 
 
             handler1 = HandlerStatusDot("blue")
@@ -526,19 +559,9 @@ if __name__ == "__main__":
             subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
             #bbg.sub(subs5)
 
-            #time.sleep(10)
-            #bbg.unsub(subs1)
-            #time.sleep(3)
-            #bbg.unsub(subs2)
-            #time.sleep(3)
-            #bbg.unsub(subs3)
-            #time.sleep(3)
-            #bbg.unsub(subs4)
-            #bbg.close()
             IPython.embed()
-        except KeyboardInterrupt:
-            print("Keyboard interrupt")
-        finally:
-            pass
+        except Exception as e:
+            print(f"Error: {e}")
+
 
 

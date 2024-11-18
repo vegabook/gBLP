@@ -116,16 +116,6 @@ class BbgStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.ping = channel.unary_unary(
-                '/bloomberg.Bbg/ping',
-                request_serializer=bloomberg__pb2.Ping.SerializeToString,
-                response_deserializer=bloomberg__pb2.Pong.FromString,
-                _registered_method=True)
-        self.pong = channel.unary_unary(
-                '/bloomberg.Bbg/pong',
-                request_serializer=bloomberg__pb2.Pong.SerializeToString,
-                response_deserializer=bloomberg__pb2.Ping.FromString,
-                _registered_method=True)
         self.sub = channel.unary_stream(
                 '/bloomberg.Bbg/sub',
                 request_serializer=bloomberg__pb2.TopicList.SerializeToString,
@@ -151,23 +141,16 @@ class BbgStub(object):
                 request_serializer=bloomberg__pb2.IntradayBarRequest.SerializeToString,
                 response_deserializer=bloomberg__pb2.IntradayBarResponse.FromString,
                 _registered_method=True)
+        self.referenceDataRequest = channel.unary_unary(
+                '/bloomberg.Bbg/referenceDataRequest',
+                request_serializer=bloomberg__pb2.ReferenceDataRequest.SerializeToString,
+                response_deserializer=bloomberg__pb2.ReferenceDataResponse.FromString,
+                _registered_method=True)
 
 
 class BbgServicer(object):
     """Bloomberg API session management
     """
-
-    def ping(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def pong(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
 
     def sub(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -200,19 +183,15 @@ class BbgServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def referenceDataRequest(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_BbgServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'ping': grpc.unary_unary_rpc_method_handler(
-                    servicer.ping,
-                    request_deserializer=bloomberg__pb2.Ping.FromString,
-                    response_serializer=bloomberg__pb2.Pong.SerializeToString,
-            ),
-            'pong': grpc.unary_unary_rpc_method_handler(
-                    servicer.pong,
-                    request_deserializer=bloomberg__pb2.Pong.FromString,
-                    response_serializer=bloomberg__pb2.Ping.SerializeToString,
-            ),
             'sub': grpc.unary_stream_rpc_method_handler(
                     servicer.sub,
                     request_deserializer=bloomberg__pb2.TopicList.FromString,
@@ -238,6 +217,11 @@ def add_BbgServicer_to_server(servicer, server):
                     request_deserializer=bloomberg__pb2.IntradayBarRequest.FromString,
                     response_serializer=bloomberg__pb2.IntradayBarResponse.SerializeToString,
             ),
+            'referenceDataRequest': grpc.unary_unary_rpc_method_handler(
+                    servicer.referenceDataRequest,
+                    request_deserializer=bloomberg__pb2.ReferenceDataRequest.FromString,
+                    response_serializer=bloomberg__pb2.ReferenceDataResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'bloomberg.Bbg', rpc_method_handlers)
@@ -249,60 +233,6 @@ def add_BbgServicer_to_server(servicer, server):
 class Bbg(object):
     """Bloomberg API session management
     """
-
-    @staticmethod
-    def ping(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/ping',
-            bloomberg__pb2.Ping.SerializeToString,
-            bloomberg__pb2.Pong.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def pong(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/pong',
-            bloomberg__pb2.Pong.SerializeToString,
-            bloomberg__pb2.Ping.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
 
     @staticmethod
     def sub(request,
@@ -429,6 +359,33 @@ class Bbg(object):
             '/bloomberg.Bbg/intradayBarRequest',
             bloomberg__pb2.IntradayBarRequest.SerializeToString,
             bloomberg__pb2.IntradayBarResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def referenceDataRequest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bloomberg.Bbg/referenceDataRequest',
+            bloomberg__pb2.ReferenceDataRequest.SerializeToString,
+            bloomberg__pb2.ReferenceDataResponse.FromString,
             options,
             channel_credentials,
             insecure,
