@@ -50,10 +50,8 @@ from constants import (
 )
 
 # TODO FIRST RELEASE
-# * reference data request
 # * response errors check ("Any? acceptable?") FieldExceptions?
 # * camelcase subscription proto fields consistency
-# * consider moving subscription message response parsers out of the router and into the responseParsers
 # * commit, then simplify and lint in new branch
 # * check UTC status (recall reference data request must have UTC TRUE specified)
 # TODO FROLLOW UP RELEASE
@@ -460,6 +458,13 @@ class HandlerTimeBars():
             if response.barvals.HasField("timestamp"):
                 print(response.barvals.servertimestamp.seconds - response.barvals.timestamp.seconds)
 
+class HandlerPrintnum():
+    async def handle(self, response):
+        if response.HasField("fieldvals"):
+            for fv in response.fieldvals.vals:
+                if fv.name == "LAST_PRICE":
+                    print(fv.val.number_value)  
+
 if __name__ == "__main__":
 
     # TODO move certs into another class
@@ -469,99 +474,102 @@ if __name__ == "__main__":
     else:
         try:
             bbg = Bbg()
-
-            ref = bbg.referenceDataRequest(topics = ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy", "WACKO Zillion", 
-                                                     "YCGT0018 Index"], 
-                                           fields = ["PX_LAST", "CUR_MKT_CAP", "INDX_MEMBERS", "NAME", "CURVE_MEMBERS"])
-
-            hist = bbg.historicalDataRequest(
-                ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
-                ["PX_LAST", "CUR_MKT_CAP"],
-                dt.datetime(2023, 11, 28),
-                dt.datetime(2023, 11, 30)
-            )
-            print(hist)
-
-            # Request intraday bars
-            intra = bbg.intradayBarRequest(topic = "USDZAR Curncy",
-                start = dt.datetime(2024, 10, 28, 6, 0),
-                end = dt.datetime.now(),
-                interval = 1
-            )
-            print(intra)
-
-            # Request intraday bars
-            intra = bbg.intradayBarRequest(topic = "EURCZK Curncy",
-                start = dt.datetime.now() - dt.timedelta(days=3),
-                end = dt.datetime.now(),
-                interval = 1
-            )
-            print(intra)
-
-            IPython.embed()
-
-
-            handler1 = HandlerStatusDot("blue")
-            subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-            bbg.sub(subs1, handler = handler1)
-
-
-            handler2 = Handler("red")
-            subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
-            bbg.sub(subs2, handler = handler2)
-
-            handler3 = Handler("blue")
-            subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
-            bbg.sub(subs3, handler = handler3)
-
-            fx = [
-                "EURUSD Curncy",
-                "USDJPY Curncy",
-                "GBPUSD Curncy",
-                "AUDUSD Curncy",
-                "USDCAD Curncy",
-                "USDCHF Curncy",
-                "NZDUSD Curncy",
-                "EURGBP Curncy",
-                "EURJPY Curncy",
-                "EURAUD Curncy",
-                "EURCAD Curncy",
-                "EURCHF Curncy",
-                "GBPJPY Curncy",
-                "GBPAUD Curncy",
-                "GBPCAD Curncy",
-                "GBPCHF Curncy",
-                "AUDJPY Curncy",
-                "AUDNZD Curncy",
-                "AUDCAD Curncy",
-                "AUDCHF Curncy",
-                "CADJPY Curncy",
-                "CADCHF Curncy",
-                "NZDJPY Curncy",
-                "NZDCAD Curncy",
-                "NZDCHF Curncy",
-                "USDSGD Curncy",
-                "USDHKD Curncy",
-                "USDCNY Curncy",
-                "EURNZD Curncy",
-                "EURSGD Curncy"
-            ]
-            handler4 = HandlerTime()
-            subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
-            bbg.sub(subs4, handler = handler4)
-
-            import csv
-            with open("/home/tbrowne/scratch/cusip.csv") as f:
-                reader = csv.reader(f)
-                tickers = [x[1] + " Corp" for x in list(reader)]
-            subtickers = tickers[-100:]
-            handler5 = HandlerTimeBars()
-            subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
-            #bbg.sub(subs5)
-
             IPython.embed()
         except Exception as e:
             print(f"Error: {e}")
 
 
 
+            #handler1 = HandlerStatusDot("blue")
+            #subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
+            #bbg.sub(subs1, handler = handler1)
+#
+#
+#            handler2 = Handler("red")
+#            subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
+#            bbg.sub(subs2, handler = handler2)
+#
+#            handler3 = Handler("blue")
+#            subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
+#            bbg.sub(subs3, handler = handler3)
+#
+#            fx = [
+#                "EURUSD Curncy",
+#                "USDJPY Curncy",
+#                "GBPUSD Curncy",
+#                "AUDUSD Curncy",
+#                "USDCAD Curncy",
+#                "USDCHF Curncy",
+#                "NZDUSD Curncy",
+#                "EURGBP Curncy",
+#                "EURJPY Curncy",
+#                "EURAUD Curncy",
+#                "EURCAD Curncy",
+#                "EURCHF Curncy",
+#                "GBPJPY Curncy",
+#                "GBPAUD Curncy",
+#                "GBPCAD Curncy",
+#                "GBPCHF Curncy",
+#                "AUDJPY Curncy",
+#                "AUDNZD Curncy",
+#                "AUDCAD Curncy",
+#                "AUDCHF Curncy",
+#                "CADJPY Curncy",
+#                "CADCHF Curncy",
+#                "NZDJPY Curncy",
+#                "NZDCAD Curncy",
+#                "NZDCHF Curncy",
+#                "USDSGD Curncy",
+#                "USDHKD Curncy",
+#                "USDCNY Curncy",
+#                "EURNZD Curncy",
+#                "EURSGD Curncy"
+#            ]
+#            handler4 = HandlerTime()
+#            subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
+#            bbg.sub(subs4, handler = handler4)
+#
+#            import csv
+#            with open("/home/tbrowne/scratch/cusip.csv") as f:
+#                reader = csv.reader(f)
+#                tickers = [x[1] + " BGN Corp" for x in list(reader)]
+#            subtickers = tickers[-100:]
+#            handler5 = HandlerTimeBars()
+#            subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
+#            bbg.sub(subs5)
+#
+#            ref = bbg.referenceDataRequest(topics = ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy", "WACKO Zillion", 
+#                                                     "YCGT0018 Index"], 
+#                                           fields = ["PX_LAST", "CUR_MKT_CAP", "INDX_MEMBERS", "NAME", "CURVE_MEMBERS"])
+#
+#            hist = bbg.historicalDataRequest(
+#                ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
+#                ["PX_LAST", "CUR_MKT_CAP"],
+#                dt.datetime(2023, 11, 28),
+#                dt.datetime(2024, 11, 30)
+#            )
+#
+#            # Request intraday bars
+#            intra = []
+#            for fx1 in fx:
+#                ii = bbg.intradayBarRequest(topic = fx1,
+#                     start = dt.datetime(2024, 2, 28, 6, 0),
+#                     end = dt.datetime.now(),
+#                     interval = 1
+#                )
+#                intra.append(ii)
+#
+#            # Request intraday bars
+#            intra2 = bbg.intradayBarRequest(topic = "EURCZK Curncy",
+#                start = dt.datetime.now() - dt.timedelta(days=140),
+#                end = dt.datetime.now(),
+#                interval = 1
+#            )
+#
+#
+#            IPython.embed()
+#        except Exception as e:
+#            print(f"Error: {e}")
+#
+#
+####

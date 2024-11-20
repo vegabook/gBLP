@@ -71,7 +71,8 @@ from util.ConnectionAndAuthOptions import \
 from EventRouter import EventRouter
 
 from util.certMaker import get_conf_dir, make_client_certs, make_all_certs
-from util.utils import makeName
+from util.utils import makeName, printLicence, checkThreads
+
 from cryptography.hazmat.primitives import serialization, hashes
 
 from rich.console import Console; console = Console()
@@ -260,7 +261,6 @@ class SessionRunner(object):
         self.maxEventQueueSize = 10000
         self.servicesOpen = dict()
         self.correlators = dict()
-        self.alive = False
         self.session = None # must SessionRunner.open() one first
         self.servicesAvail = {"Subscribe": "//blp/mktdata",
                               "UnSubscribe": "//blp/mktdata",
@@ -332,9 +332,7 @@ class SessionRunner(object):
                                           eventHandler=self.handler.processEvent)
         if not self.session.start():
             logger.error("Failed to start session.")
-            self.alive = False
         else:
-            self.alive = True
         # return all the details over gRPC
         logger.debug(f"Session opened")
 
@@ -346,7 +344,6 @@ class SessionRunner(object):
         if not self.comqTask.done():
             logger.info("Cancelling comq listener")
             self.comqTask.cancel()
-        self.alive = False
         logger.info(f"Bloomberg session closed")
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
@@ -384,7 +381,6 @@ class SessionRunner(object):
         success, bbgRequest = self._createEmptyRequest("IntradayBarRequest")
         if not success:
             return []
-        logger.info(f"setting security {request.topic}")
         dtstart = request.start.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
         dtend = request.end.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
         requestDict = {"security": request.topic,
@@ -652,7 +648,7 @@ async def keypressDetector():
                 print("Q pressed")
                 done.set()
             case b't':
-                printThreads()
+                checkThreads()
             case b'c':
                 await comq.put(b"c")
         await asyncio.sleep(0.1)
@@ -666,29 +662,13 @@ def check_keypress():
         return key
     return None
 
-def printThreads(id = ""):
-    console.print(f"[bold magenta]----------------------------------------------------------------{id}")
-    for th in threading.enumerate(): 
-        if not th.name == "MainThread":
-            console.print(f"[bold magenta]Thread {th.name} is running[/bold magenta]")
-
-
 
 async def main():
     bbgAioServer = grpc.aio.server()
     keyAioServer = grpc.aio.server()
     bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer))
     keyTask = asyncio.create_task(keySession(keyAioServer))
-    console.print(("[bold magenta]This software is provided 'as is', without warranty of any kind, express "
-                  "or implied. The developer of this software assumes no responsibility or "
-                  "liability for any use of the software by any party. It is the sole "
-                  "responsibility of the user to ensure that their use of this software "
-                  "complies with all applicable laws, regulations, and the terms and conditions "
-                  "of the Bloomberg API. By using this software, you acknowledge and agree that "
-                  "the developer shall not be held liable for any consequences arising from the "
-                  "use of this software, including but not limited to, any violations of the "
-                  "Bloomberg API terms."))
-
+    printLicence()
     console.print("[bold blue]--------------------------")
     console.print("[bold red on white blink]Press Q to stop the server")
     console.print("[bold blue]--------------------------")

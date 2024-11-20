@@ -35,7 +35,7 @@ def buildIntradayBarResponse(data):
             timestamp = Timestamp()
             timestamp.FromDatetime(bar["time"])
             barData.time.CopyFrom(timestamp)
-        response.bars.append(barData)
+            response.bars.append(barData)
     return response
 
 

@@ -35,6 +35,7 @@ class EventRouter(object):
         self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
 
 
+
     def getTimeStamp(self):
         return time.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -87,6 +88,14 @@ class EventRouter(object):
             topic = Topic()
             topic.status.CopyFrom(self.makeStatusMessage(msg, topic))
             statusstr = statusType.Name(topic.status.statustype)
+            if statusstr ==statusType.Name(statusType.SessionTerminated):
+                console.print(f"[bold red]{statusstr}[/bold red]", end = " ")
+                logger.info(f"Received session termination status: {statusstr}")
+                # TODO clear correlators
+                # send messages to all connected clients on subscription
+                # TODO: send reconnection message to session
+            else:
+                logger.info(f"Received miscellaneous status: {statusstr}")
             console.print(f"[bold green]{statusstr}[/bold green]", end = " ")
             logger.info(f"Received miscellaneous status: {statusstr}")
 
