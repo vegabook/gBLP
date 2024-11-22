@@ -1,5 +1,6 @@
 import random
 import threading
+from multiprocessing import Process, active_children
 from rich.console import Console; console = Console()
 from rich.panel import Panel
 from rich.box import SQUARE
@@ -16,10 +17,19 @@ def makeName(alphaLength, digitLength):
     return word
 
 
-def checkThreads():
+def checkThreads(colour = "magenta", processes = True):
+    print("------------- Threads -------------")
     for th in threading.enumerate(): 
         if not th.name == "MainThread":
-            console.print(f"[bold magenta]Thread {th.name} is still running[/bold magenta]")
+            console.print(f"[{colour}]Thread {th.name} is still running[{colour}]")
+    if processes:
+        print("------------- Processes-------------")
+        for proc in active_children():
+            console.print((f"[bold {colour}]Name: {proc.name}, "
+                           f"PID: {proc.pid}, Is Alive: {proc.is_alive()}[/bold {colour}]"))
+
+    print("------------------------------------")
+
 
 def printLicence():
     licencetxt = ("This software is provided 'as is', without warranty of any kind, express "

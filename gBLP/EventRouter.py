@@ -32,7 +32,7 @@ class EventRouter(object):
             logger.warning(f"Correlator {cid} not found")
             return
         q = correlator["q"]
-        self.parent.loop.call_soon_threadsafe(q.put_nowait, sendmsg)
+        q.put(sendmsg)
 
 
 

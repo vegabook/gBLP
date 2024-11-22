@@ -7,9 +7,7 @@ from google.protobuf.struct_pb2 import Value
 from google.protobuf.struct_pb2 import Struct
 import datetime as dt
 
-import logging
-logger = logging.getLogger(__name__)
-
+import logging; logger = logging.getLogger(__name__)
 
 def buildIntradayBarResponse(data):
     """ see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=177"""
@@ -82,9 +80,7 @@ def createValue(value):
 
 def createFieldData(fieldDataDict):
     fieldData = bb.FieldData()
-    print("yaaaaaaaaaaaaaa1")
     for key, value in fieldDataDict.items():
-        print("yaaaaaaaaaaaaaa2")
         fieldValue = createValue(value)
         fieldData.fields[key].CopyFrom(fieldValue)
     return fieldData

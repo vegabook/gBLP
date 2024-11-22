@@ -14,8 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import logging
+# change process to process name
+logging.basicConfig(level=logging.DEBUG,
+                    format="%(asctime)s | %(levelname)s | %(name)s | %(processName)s | %(funcName)s | %(message)s")
+logger = logging.getLogger(__name__)
+
+import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import string
 import random
 from collections import defaultdict
@@ -28,6 +33,9 @@ import queue
 import blpapi
 import msvcrt
 import traceback
+
+import multiprocessing # no more thread leaking from blpapi. Wrap and shut. 
+from multiprocessing import Manager
 
 import grpc
 from bloomberg_pb2 import KeyRequestId, KeyResponse
@@ -75,24 +83,14 @@ from util.utils import makeName, printLicence, checkThreads
 
 from cryptography.hazmat.primitives import serialization, hashes
 
-from rich.console import Console; console = Console()
-from rich.traceback import install; install()
-from rich.logging import RichHandler
-from rich.pretty import pprint
 
 
 # ----------------- global variables ----------------------
 
-done = asyncio.Event() # signal to stop everything
-comq = asyncio.Queue() # inward communication queue for the bloomberg session
 
-# logging
-
-import logging
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
-                    handlers=[RichHandler(rich_tracebacks=True, markup=True)])
-logger = logging.getLogger(__name__)
+from rich.console import Console; console = Console()
+from rich.traceback import install; install()
+from rich.pretty import pprint
 
 NUMBER_OF_REPLY = 10
 
@@ -160,7 +158,6 @@ def parseCmdLine():
     options.options.append(f"interval=1")
     return options
 
-globalOptions = parseCmdLine()
 
 
 # ----------------- keys manager for mTLS ----------------------
@@ -197,10 +194,9 @@ class KeyManager(KeyManagerServicer):
             context.abort(grpc.StatusCode.PERMISSION_DENIED, "Request denied")
 
 
-async def serveBbgSession(bbgAioServer) -> None:
+async def serveBbgSession(bbgAioServer, bbgManager) -> None:
 
     listenAddr = f"{globalOptions.grpchost}:{globalOptions.grpcport}"
-    bbgManager = Bbg()
     add_BbgServicer_to_server(bbgManager, bbgAioServer)
 
     # first check if the certs are there
@@ -249,14 +245,16 @@ async def keySession(keyAioServer) -> None:
     await keyAioServer.start()
     logging.info(f"Starting key server on {keyListenAddr}")
     await keyAioServer.wait_for_termination()
-    logging.info("Key server stopped.")
 
 
 
 # -------------------- individual session handler ----------------------
 
 class SessionRunner(object):
-    def __init__(self, options):
+    def __init__(self, options, comq, done):
+        self.options = options
+        self.comq = comq 
+        self.done = done
         self.interval = options.interval # subscription interval
         self.maxEventQueueSize = 10000
         self.servicesOpen = dict()
@@ -284,9 +282,7 @@ class SessionRunner(object):
         self.numDispatcherThreads = 1 # if > 1 then threaded dispatchers will be created
         self.loop = asyncio.get_event_loop() # used by the event handler
         # start the comq
-        self.comq = comq # global comms queue
-        self.comqTask = asyncio.create_task(self.listen_comq())
-        self.open()
+        self.comqTask = asyncio.create_task(self.listenComq())
 
 
     def _getService(self, serviceReq: str) -> bool:
@@ -318,7 +314,7 @@ class SessionRunner(object):
     def open(self):
         """ open the session and associated services """
         # setup the correct options
-        sessionOptions = createSessionOptions(globalOptions) 
+        sessionOptions = createSessionOptions(self.options)
         sessionOptions.setMaxEventQueueSize(self.maxEventQueueSize)
         self.handler = EventRouter(parent = self)
         if self.numDispatcherThreads > 1:
@@ -333,10 +329,9 @@ class SessionRunner(object):
         if not self.session.start():
             logger.error("Failed to start session.")
         else:
-        # return all the details over gRPC
-        logger.debug(f"Session opened")
+            logger.debug(f"Session opened")
 
-    async def close(self):
+    def close(self):
         """ close the session """
         self.session.stop()
         if self.numDispatcherThreads > 1:
@@ -345,6 +340,7 @@ class SessionRunner(object):
             logger.info("Cancelling comq listener")
             self.comqTask.cancel()
         logger.info(f"Bloomberg session closed")
+
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     q: asyncio.Queue,
@@ -461,15 +457,15 @@ class SessionRunner(object):
             self.session.subscribe(barsublist)
         if ticksublist.size() > 0:
             self.session.subscribe(ticksublist)
-        return True
 
-    async def subscriptionInfo(self, clientid) -> TopicList:
+
+    async def subscriptionInfo(self, clientid, q) -> TopicList:
         """ get the current subscription list """
         tl = TopicList()
         for v in self.correlators.values():
             if v["clientid"] == clientid:
                 tl.topics.append(v["topic"])
-        return tl
+        q.put(tl)
 
 
     async def unsub(self, topicList: TopicList):
@@ -493,44 +489,92 @@ class SessionRunner(object):
             self.session.unsubscribe(bbgunsublist)
 
 
-    async def listen_comq(self):
-        """ listen for messages from the grpc handler """
-
-        async def comq_timeoutable_listener():
-            msg = await self.comq.get()
-            return msg
-
-        while not done.is_set():
+    async def listenComq(self):
+        """Listen for messages from the grpc handler"""
+        while not self.done.is_set():
             try:
-                msg = await asyncio.wait_for(comq_timeoutable_listener(), 0.1)
-            except asyncio.TimeoutError:
-                msg = None
-                continue
+                msg = await asyncio.to_thread(self.comq.get, timeout=0.1)
+                logger.info(f"SessionRunner message received: {msg}")
+                # Process the message here
+                match msg:
+                    case ("key", b"c"):
+                        console.print(f"[bold cyan]Number of correlators: {len(self.correlators)}")
+                        for k in self.correlators.keys():
+                            console.print(f"[cyan]{k}")
+                    case ("key", b"t"):
+                        checkThreads(processes=False, colour="green")
+                    case ("request", "historicalDataRequest", (request, q, clientid)):
+                        logger.info(f"Processing historicalDataRequest from {clientid}")
+                        await self.historicalDataRequest(request, q, clientid)
+                    case ("request", "intradayBarRequest", (request, q, clientid)):
+                        logger.info(f"Processing intradayBarRequest from {clientid}")
+                        await self.intradayBarRequest(request, q, clientid)
+                    case ("request", "referenceDataRequest", (request, q, clientid)):
+                        logger.info(f"Processing referenceDataRequest from {clientid}")
+                        await self.referenceDataRequest(request, q, clientid)
+                    case ("request", "sub", (topicList, subq, clientid)):
+                        logger.info(f"Processing sub request from {clientid}")
+                        await self.sub(topicList, subq, clientid)
+                    case ("request", "unsub", (topicList,)):
+                        logger.info(f"Processing unsub request")
+                        await self.unsub(topicList)
+                    case ("request", "subscriptionInfo", (clientid, q)):
+                        logger.info(f"Processing subscriptionInfo request from {clientid}")
+                        tlist = await self.subscriptionInfo(clientid, q)
+                    case ("request", "close"):
+                        self.done.set()
+            except queue.Empty:
+                continue  # No message; keep looping
             except asyncio.CancelledError:
-                logger.info("comq listener cancelled. Exiting.")
+                logger.info("CancelledError")
+                self.done.set
                 break
             except Exception as e:
-                logger.error(f"Error in comq listener {e}")
+                logger.error(f"Error in comq listener: {e}")
                 break
-            # wrap this in a timeout
-            match msg:
-                case b"c":
-                    console.print(f"[bold cyan]Number of correlators: {len(self.correlators)}")
-                    for k in self.correlators.keys():
-                        console.print(f"[cyan]{k}")
+        logger.info("Comq listener stopped.")
+        await self.close()
 
 
             
 # ----------------- multiple sessions are managed here ----------------------
 
+def runSessionRunner(options, comq, done):
+
+    async def start_session_runner():
+        logger.info("Starting session runner")
+        sessionRunner = SessionRunner(options, comq, done)
+        sessionRunner.open()
+        try:
+            # Keep the event loop running
+            await asyncio.Future()  # Run until cancelled
+        except asyncio.CancelledError:
+            logger.info("SessionRunner event loop stopped.")
+        finally:
+            await sessionRunner.close()
+
+    # Set up and run the asyncio event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(start_session_runner())
+    finally:
+        loop.close()
+
+
 class Bbg(BbgServicer):
     # implements all the gRPC methods for the session manager
     # and communicates with the SessionRunner(s)
 
-    def __init__(self):
-        self.queues = dict()
-        self.session = SessionRunner(options=globalOptions)
-        self.grpc_rep = self.session.open()
+    def __init__(self, options, comq, done, manager):
+        self.sessionProc = multiprocessing.Process(target=runSessionRunner, 
+                                                   args=(options, comq, done), 
+                                                   name="SessionRunner")
+        self.sessionProc.start()
+        self.options = options
+        self.manager = manager
+        self.comq = comq
+        self.done = done
 
     def makeClientID(self, context):
         client = dict(context.invocation_metadata())["client"]
@@ -544,11 +588,13 @@ class Bbg(BbgServicer):
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
         clientid = self.makeClientID(context)
         logger.info(f"Received historical data request {request} from {clientid}")
-        q = asyncio.Queue()
+        q = self.manager.Queue()
         messageList = []
-        await self.session.historicalDataRequest(request, q, clientid)
+        self.comq.put(("request", "historicalDataRequest", (request, q, clientid)))
+        loop = asyncio.get_event_loop()
         while True:
-            msg = await q.get()
+            # get from multprocessing queue from async
+            msg = await loop.run_in_executor(None, q.get)
             messageList.append(msg[1]["data"])
             if not msg[1]["partial"]:
                 break
@@ -563,11 +609,12 @@ class Bbg(BbgServicer):
                                   context: grpc.aio.ServicerContext) -> IntradayBarResponse:
         clientid = self.makeClientID(context)
         logger.info(f"Received intraday bar request {request} from {clientid}")
-        q = asyncio.Queue()
+        q = self.manager.Queue()
         messageList = []
-        await self.session.intradayBarRequest(request, q, clientid)
+        self.comq.put(("request", "intradayBarRequest", (request, q, clientid)))
+        loop = asyncio.get_event_loop()
         while True:
-            msg = await q.get()
+            msg = await loop.run_in_executor(None, q.get)
             messageList.append(msg[1]["data"])
             if not msg[1]["partial"]:
                 break
@@ -581,11 +628,12 @@ class Bbg(BbgServicer):
                                    context: grpc.aio.ServicerContext) -> ReferenceDataResponse:
         clientid = self.makeClientID(context)
         logger.info(f"Received reference data request {request} from {clientid}")
-        q = asyncio.Queue()
+        q = self.manager.Queue()
         messageList = []
-        await self.session.referenceDataRequest(request, q, clientid)
+        self.comq.put(("request", "referenceDataRequest", (request, q, clientid)))
+        loop = asyncio.get_event_loop()
         while True:
-            msg = await q.get() # TODO timeout?
+            msg = await loop.run_in_executor(None, q.get)
             messageList.append(msg[1]["data"])
             if not msg[1]["partial"]:
                 break
@@ -599,15 +647,14 @@ class Bbg(BbgServicer):
     async def sub(self, topicList: TopicList, context: grpc.aio.ServicerContext):
         """subscribe""" 
         clientid = self.makeClientID(context)
-        subq = asyncio.Queue()
-        success = await self.session.sub(topicList, subq, clientid)
-        if not success:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Failed to subscribe")
-        while not done.is_set():
+        subq = self.manager.Queue()
+        self.comq.put(("request", "sub", (topicList, subq, clientid)))
+        loop = asyncio.get_event_loop()
+        while not self.done.is_set():
             # Get messages from the session's queue
             # async get from the queue
             try:
-                msg = await subq.get() 
+                msg = await loop.run_in_executor(None, q.get)
             except asyncio.CancelledError:
                 await self.session.unsub(topicList)
                 logger.info("Subscription stream cancelled")
@@ -622,36 +669,45 @@ class Bbg(BbgServicer):
     async def unsub(self, topicList: TopicList, context: grpc.aio.ServicerContext):
         clientid = self.makeClientID(context)
         logger.info(f"Unsubscribing {topicList} for {clientid}")
-        await self.session.unsub(topicList)
+        self.comq.put(("request", "unsub", (topicList,)))
         return empty_pb2.Empty()
 
 
     async def subscriptionInfo(self, _request, 
                                context: grpc.aio.ServicerContext) -> TopicList:
         clientid = self.makeClientID(context)
+        manager = Manager()
+        q = manager.Queue()
+        self.comq.put(("request", "subscriptionInfo", (clientid, q)))
         logger.info(f"Received subscription info request from {clientid}")
-        tlist = await self.session.subscriptionInfo(clientid)
+        loop = asyncio.get_event_loop()
+        tlist = await loop.run_in_executor(None, q.get)
         return tlist
 
-
-
     async def close(self):
-        await self.session.close()
+        self.comq.put(("key", b"q"))
+        self.sessionProc.terminate()
 
 
-async def keypressDetector():
+async def keypressDetector(comq, done):
     while not done.is_set():
         # Offload the blocking part to a different thread
         key = await asyncio.to_thread(check_keypress)
+        if key is not None:
+            logger.info(f"Keypress detected: {key}")
         match key:
             case b'q':
                 print("Q pressed")
                 done.set()
             case b't':
                 checkThreads()
+                comq.put(("key", b"t"))
             case b'c':
-                await comq.put(b"c")
-        await asyncio.sleep(0.1)
+                # TODO fix the comq below
+                comq.put(("key", b"c"))
+            case None:
+                pass
+        await asyncio.sleep(0.2)
     logger.info("Keypress detector stopped.")
 
 
@@ -663,17 +719,22 @@ def check_keypress():
     return None
 
 
-async def main():
+async def main(globalOptions):
     bbgAioServer = grpc.aio.server()
     keyAioServer = grpc.aio.server()
-    bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer))
+    manager = Manager()
+    comq = manager.Queue() # communication queue
+    #done = manager.Event()
+    done = manager.Event()
+    bbgManager = Bbg(globalOptions, comq, done, manager)
+    bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer, bbgManager))
     keyTask = asyncio.create_task(keySession(keyAioServer))
     printLicence()
     console.print("[bold blue]--------------------------")
     console.print("[bold red on white blink]Press Q to stop the server")
     console.print("[bold blue]--------------------------")
-    keypressTask =asyncio.create_task(keypressDetector()) 
-    await done.wait()
+    keypressTask =asyncio.create_task(keypressDetector(comq, done)) 
+    await asyncio.to_thread(done.wait)
     logger.info("done waiting for. Stopping gRPC servers...")
     await bbgAioServer.stop(grace=3)
     logger.info("gRPC server stopped.") 
@@ -686,7 +747,8 @@ async def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
+    globalOptions = parseCmdLine()
     if globalOptions.gencerts:
         confdir = get_conf_dir()
         make_all_certs(str(globalOptions.grpchost), confdir)
@@ -697,7 +759,7 @@ if __name__ == "__main__":
         print("Deleted all certificates. Run --gencerts to make new ones.")
     else:
         try:
-            asyncio.run(main())
+            asyncio.run(main(globalOptions))
             logger.info("asyncio main() exited")
         except KeyboardInterrupt:
             print("Keyboard interrupt")
