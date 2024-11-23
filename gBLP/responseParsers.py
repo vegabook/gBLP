@@ -9,32 +9,6 @@ import datetime as dt
 
 import logging; logger = logging.getLogger(__name__)
 
-def buildIntradayBarResponse(data):
-    """ see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=177"""
-    response = bb.IntradayBarResponse()
-    for item in data:
-        # althouth we might get a responseError _per item" (block of messages)
-        # we're going to hoist such an error right into the top level response
-        # and stop parsing the rest of the items. HistoricalDataRequest is 
-        # different because responseErrors might happen per field or per security
-        # but IntradaryBarReqests only have one security and one field
-        if item.get('responseError'):
-            response.responseError = item['responseError']
-            break
-        for bar in item["barData"]["barTickData"]:
-            barData = bb.IntradayBarData()
-            barData.open = bar["open"]
-            barData.high = bar["high"]
-            barData.low = bar["low"]
-            barData.close = bar["close"]
-            barData.volume = bar["volume"]
-            barData.numEvents = bar["numEvents"]
-            barData.value = bar["value"]
-            timestamp = Timestamp()
-            timestamp.FromDatetime(bar["time"])
-            barData.time.CopyFrom(timestamp)
-            response.bars.append(barData)
-    return response
 
 
 def createValue(value):
@@ -101,15 +75,6 @@ def createFieldException(fieldExceptionDict):
     fieldException.errorInfo.CopyFrom(errorInfo)
     return fieldException
 
-def createSecurityError(securityErrorDict):
-    securityError = bb.SecurityError()
-    securityError.source = securityErrorDict.get("source", "")
-    securityError.code = securityErrorDict.get("code", 0)
-    securityError.category = securityErrorDict.get("category", "")
-    securityError.message = securityErrorDict.get("message", "")
-    securityError.subcategory = securityErrorDict.get("subcategory", "")
-    return securityError
-
 def createSecurityData(securityDataDict):
     securityData = bb.SecurityData()
     securityData.security = securityDataDict.get("security", "")
@@ -130,37 +95,77 @@ def createSecurityData(securityDataDict):
         securityData.fieldExceptions.append(fieldException)
     # Handle securityError
     if "securityError" in securityDataDict:
-        securityError = createSecurityError(securityDataDict["securityError"])
+        securityError = createErrorInfo(securityDataDict["securityError"])
         securityData.securityError.CopyFrom(securityError)
     return securityData
 
 def createResponse(dataList):
     response = bb.Response()
     for item in dataList:
-        breakpoint()
         securityData = createSecurityData(item)
         response.securitydata.append(securityData)
     return response
 
 
 def buildReferenceDataResponse(data):
-    """ see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=164"""
+    """
+    https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=164
+    """
     response = bb.ReferenceDataResponse()
     # may be multiple items if we had partial fills 
     for item in data:
-        for sec in item["securityData"]:
-            response.securitydata.append(createSecurityData(sec))
         if item.get('responseError'):
-            response.responseError = createErrorInfo(item['responseError'])
+            err = createErrorInfo(item["responseError"])
+            response.responseError.CopyFrom(err)
+            break
+        for sec in item["securityData"]:
+            if sec.get('securityError'):
+                err = createErrorInfo(sec["securityError"])
+                response.responseError.CopyFrom(err)
+            else:
+                response.securitydata.append(createSecurityData(sec))
     return response
 
 
 def buildHistoricalDataResponse(data):
-    """ see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=170"""
+    """
+    https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=170
+    """
     response = bb.HistoricalDataResponse()
     for sec in data:
         response.securitydata.append(createSecurityData(sec["securityData"]))
-    if sec.get('responseError'):
-        response.responseError = createErrorInfo(sec['responseError'])
+        if sec.get('securityError'):
+            err = createErrorInfo(sec["securityError"])
+            response.securityError.CopyFrom(err)
     return response
 
+
+def buildIntradayBarResponse(data):
+    """
+    https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=177
+    """
+    response = bb.IntradayBarResponse()
+    for item in data:
+        # althouth we might get a responseError _per item" (block of messages)
+        # we're going to hoist such an error right into the top level response
+        # and stop parsing the rest of the items. HistoricalDataRequest is 
+        # different because responseErrors might happen per field or per security
+        # but IntradaryBarReqests only have one security and one field
+        if item.get('responseError'):
+            err = createErrorInfo(item["responseError"])
+            response.responseError.CopyFrom(err)
+            break
+        for bar in item["barData"]["barTickData"]:
+            barData = bb.IntradayBarData()
+            barData.open = bar["open"]
+            barData.high = bar["high"]
+            barData.low = bar["low"]
+            barData.close = bar["close"]
+            barData.volume = bar["volume"]
+            barData.numEvents = bar["numEvents"]
+            barData.value = bar["value"]
+            timestamp = Timestamp()
+            timestamp.FromDatetime(bar["time"])
+            barData.time.CopyFrom(timestamp)
+            response.bars.append(barData)
+    return response

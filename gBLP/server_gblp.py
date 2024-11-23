@@ -32,9 +32,6 @@ class CustomRichHandler(RichHandler):
         if record.levelno == logging.ERROR:
             # Print the entire formatted log entry in red
             console.print(f"[bold red]{log_entry}[/bold red]")
-        else:
-            # Print the entire formatted log entry normally
-            console.print(log_entry)
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -364,7 +361,7 @@ class SessionRunner(object):
 
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
-                                    q: asyncio.Queue,
+                                    q: multiprocessing.Queue,
                                     clientid: string) -> list:
         """ request historical data """
         logger.info(f"Requesting historical data {request}")
@@ -391,10 +388,10 @@ class SessionRunner(object):
 
 
     async def intradayBarRequest(self, request: IntradayBarRequest, 
-                                 q: asyncio.Queue,
+                                 q: multiprocessing.Queue,
                                  clientid: string) -> IntradayBarResponse:
         """ request intraday bar data """
-        logger.info(f"Requesting intraday bar data {request}")
+        logger.info(f"Requesting intraday bar data {str(request.topic)}")
         success, bbgRequest = self._createEmptyRequest("IntradayBarRequest")
         if not success:
             return []
@@ -418,7 +415,7 @@ class SessionRunner(object):
 
 
     async def referenceDataRequest(self, request: ReferenceDataRequest,
-                                   q: asyncio.Queue,
+                                   q: multiprocessing.Queue,
                                    clientid: string) -> ReferenceDataResponse:
         """ request reference data """
         logger.info(f"Requesting reference data {request}")
@@ -442,17 +439,20 @@ class SessionRunner(object):
 
     # ------------ subscriptions -------------------
 
-    def makeCorrelatorString(self, topic: Topic, service) -> str:
+    def makeCorrelatorString(self, topic: Topic, service: str) -> str:
         intervalstr = f"interval={int(topic.interval)}"
         fieldsstr = ",".join(topic.fields)
         topicTypeName = topicType.Name(topic.topictype) # SEDOL1/TICKER/CUSIP etc
+        # substring will be used as the correlation ID _and_ the subscription string
         substring = f"{service}/{topicTypeName}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
-        substring = f"{service}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
+        substring = f"{service}/{topic.topic}?fields={fieldsstr}&{intervalstr}" 
         return substring
 
-    async def sub(self, topicList: TopicList, 
-                        subq: asyncio.Queue, 
-                        clientid: string) -> bool:
+
+    async def sub(self, 
+                  topicList: TopicList, 
+                  subq: multiprocessing.Queue,
+                  clientid: string):
         """ subscribe to a list of topics """
         
         # make sure the service is open
@@ -490,9 +490,13 @@ class SessionRunner(object):
 
 
     async def unsub(self, topicList: TopicList):
-        """ unsubscribe from a list of topics """
+        """ unsubscribe from a list of topics. Note removal from the 
+        correlators only happens when the event handler receives the
+        unsubscription event """
         _success, barservice = self._getService("BarSubscribe")
         _success, tickservice = self._getService("Subscribe")
+        substrings = [] # will refer to these later to make sure unsubbed
+        bbgunsublist = blpapi.SubscriptionList()
         for t in topicList.topics:
             if t.subtype == subscriptionType.BAR:
                 service = self.servicesOpen["BarSubscribe"]
@@ -504,10 +508,12 @@ class SessionRunner(object):
             if not correlator:
                 logger.error(f"Correlator not found for {substring}")
                 continue
+            substrings.append(substring)
             correlid = correlator["correlid"]
-            bbgunsublist = blpapi.SubscriptionList()
             bbgunsublist.add(substring, correlationId=correlid) 
+        if substrings:
             self.session.unsubscribe(bbgunsublist)
+
 
 
     async def listenComq(self):
@@ -515,7 +521,6 @@ class SessionRunner(object):
         while not self.done.is_set():
             try:
                 msg = await asyncio.to_thread(self.comq.get, timeout=0.1)
-                logger.debug(f"SessionRunner message received: {msg}")
                 # Process the message here
                 match msg:
                     case ("key", b"c"):
@@ -525,22 +530,16 @@ class SessionRunner(object):
                     case ("key", b"t"):
                         checkThreads(processes=False, colour="green")
                     case ("request", "historicalDataRequest", (request, q, clientid)):
-                        logger.info(f"Processing historicalDataRequest from {clientid}")
                         await self.historicalDataRequest(request, q, clientid)
                     case ("request", "intradayBarRequest", (request, q, clientid)):
-                        logger.info(f"Processing intradayBarRequest from {clientid}")
                         await self.intradayBarRequest(request, q, clientid)
                     case ("request", "referenceDataRequest", (request, q, clientid)):
-                        logger.info(f"Processing referenceDataRequest from {clientid}")
                         await self.referenceDataRequest(request, q, clientid)
                     case ("request", "sub", (topicList, subq, clientid)):
-                        logger.info(f"Processing sub request from {clientid}")
                         await self.sub(topicList, subq, clientid)
                     case ("request", "unsub", (topicList,)):
-                        logger.info(f"Processing unsub request")
                         await self.unsub(topicList)
                     case ("request", "subscriptionInfo", (clientid, q)):
-                        logger.info(f"Processing subscriptionInfo request from {clientid}")
                         tlist = await self.subscriptionInfo(clientid, q)
                     case ("request", "close"):
                         self.done.set()
@@ -608,7 +607,8 @@ class Bbg(BbgServicer):
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
         clientid = self.makeClientID(context)
-        logger.info(f"Received historical data request {request} from {clientid}")
+        topicstr = ",".join(request.topics)
+        logger.info(f"Received historical data request {topicstr} from {clientid}")
         q = self.manager.Queue()
         messageList = []
         self.comq.put(("request", "historicalDataRequest", (request, q, clientid)))
@@ -629,7 +629,7 @@ class Bbg(BbgServicer):
     async def intradayBarRequest(self, request: IntradayBarRequest,
                                   context: grpc.aio.ServicerContext) -> IntradayBarResponse:
         clientid = self.makeClientID(context)
-        logger.info(f"Received intraday bar request {request} from {clientid}")
+        logger.info(f"Received intraday bar request {str(request.topic)} from {clientid}")
         q = self.manager.Queue()
         messageList = []
         self.comq.put(("request", "intradayBarRequest", (request, q, clientid)))
@@ -648,7 +648,8 @@ class Bbg(BbgServicer):
     async def referenceDataRequest(self, request: ReferenceDataRequest,
                                    context: grpc.aio.ServicerContext) -> ReferenceDataResponse:
         clientid = self.makeClientID(context)
-        logger.info(f"Received reference data request {request} from {clientid}")
+        topicstr = ",".join(request.topics)
+        logger.info(f"Received reference data request {topicstr} from {clientid}")
         q = self.manager.Queue()
         messageList = []
         self.comq.put(("request", "referenceDataRequest", (request, q, clientid)))
@@ -668,6 +669,8 @@ class Bbg(BbgServicer):
     async def sub(self, topicList: TopicList, context: grpc.aio.ServicerContext):
         """subscribe""" 
         clientid = self.makeClientID(context)
+        topicstr = ",".join([t.topic for t in topicList.topics])
+        logger.info(f"Received subscription request {topicstr} from {clientid}")
         subq = self.manager.Queue()
         self.comq.put(("request", "sub", (topicList, subq, clientid)))
         loop = asyncio.get_event_loop()
@@ -677,8 +680,8 @@ class Bbg(BbgServicer):
             try:
                 msg = await loop.run_in_executor(None, subq.get)
             except asyncio.CancelledError:
-                await self.session.unsub(topicList)
-                logger.info("Subscription stream cancelled")
+                logger.info("Subscription stream cancelled, unsubscribing.")
+                self.comq.put(("request", "unsub", (topicList, subq, clientid)))
                 break
             except Exception as e:
                 logger.error(f"Error in subscription stream {e}")
