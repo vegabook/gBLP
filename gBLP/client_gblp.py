@@ -159,10 +159,6 @@ class Bbg:
             ])
         self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
 
-        
-
-
-
     def close(self):
         while len(self.streams) > 0:
             logger.info("Cancelling stream")
@@ -375,8 +371,8 @@ class Bbg:
         async for topic in stream:
             try:
                 self.subsdata[topic.topic].append(topic)
-                if handler:
-                    asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
+                #if handler:
+                #    asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
                 #if self.done.is_set():
                 #    break
             except asyncio.CancelledError:
@@ -477,17 +473,10 @@ if __name__ == "__main__":
         data = dict()
         bbg = Bbg()
 
-        data["hist"] = bbg.historicalDataRequest(
-            ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
-            ["PX_LAST", "CUR_MKT_CAP"],
-            dt.datetime(2023, 11, 28),
-            dt.datetime(2024, 11, 30)
-        )
-
-
         handler1 = HandlerStatusDot("blue")
         subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs1, handler = handler1)
+        bbg.sub(subs1)
+        IPython.embed()
 
 
         handler2 = Handler("red")
@@ -543,6 +532,18 @@ if __name__ == "__main__":
         subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
         bbg.sub(subs5)
 
+
+        #---------------------------- request responses ----------------------------
+
+        data["hist"] = bbg.historicalDataRequest(
+            ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
+            ["PX_LAST", "CUR_MKT_CAP"],
+            dt.datetime(2023, 11, 28),
+            dt.datetime(2024, 11, 30)
+        )
+
+
+
         data["ref"] = bbg.referenceDataRequest(topics = ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy", "WACKO Zillion", 
                                                  "YCGT0018 Index"], 
                                        fields = ["PX_LAST", "CUR_MKT_CAP", "INDX_MEMBERS", "NAME", "CURVE_MEMBERS"])
@@ -552,7 +553,7 @@ if __name__ == "__main__":
         intra = []
         for fx1 in fx:
             ii = bbg.intradayBarRequest(topic = fx1,
-                 start = dt.datetime(2024, 2, 28, 6, 0),
+                 start = dt.datetime.now() - dt.timedelta(days=4),
                  end = dt.datetime.now(),
                  interval = 1
             )

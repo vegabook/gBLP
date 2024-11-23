@@ -5,6 +5,7 @@ from rich.console import Console; console = Console()
 from rich.panel import Panel
 from rich.box import SQUARE
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
+import logging; logger = logging.getLogger(__name__)
 
 def makeName(alphaLength, digitLength):
     """Make a dummy name if none provided."""

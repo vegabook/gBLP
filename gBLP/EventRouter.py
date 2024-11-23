@@ -3,12 +3,9 @@
 import blpapi
 import datetime as dt
 import time
-import logging
 import sys
 import json
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+import logging; logger = logging.getLogger(__name__)
 from bloomberg_pb2 import IntradayBarResponse
 from bloomberg_pb2 import Topic
 from bloomberg_pb2 import FieldVal, FieldVals, Status

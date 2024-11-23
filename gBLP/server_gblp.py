@@ -14,11 +14,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+assert os.name == "nt", "The gBLP server only runs on Windows"
+
+from rich.console import Console
+from rich.pretty import pprint
+from rich.logging import RichHandler
 import logging
-# change process to process name
-logging.basicConfig(level=logging.DEBUG,
-                    format="%(asctime)s | %(levelname)s | %(name)s | %(processName)s | %(funcName)s | %(message)s")
-logger = logging.getLogger(__name__)
+
+# Create a Rich console instance
+console = Console()
+
+class CustomRichHandler(RichHandler):
+    def emit(self, record):
+        # Use the formatter to generate the full log string
+        log_entry = self.format(record)
+        if record.levelno == logging.ERROR:
+            # Print the entire formatted log entry in red
+            console.print(f"[bold red]{log_entry}[/bold red]")
+        else:
+            # Print the entire formatted log entry normally
+            console.print(log_entry)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(processName)s | %(funcName)s | %(message)s"
+)
+logger = logging.getLogger(__name__)  # Get the current module's logger
+custom_handler = CustomRichHandler()
+logger.addHandler(custom_handler)  # Add the custom handler
+
 
 import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import string
@@ -26,7 +51,6 @@ import random
 from collections import defaultdict
 import json
 import datetime as dt
-import os
 import threading
 import signal
 import queue
@@ -88,9 +112,6 @@ from cryptography.hazmat.primitives import serialization, hashes
 # ----------------- global variables ----------------------
 
 
-from rich.console import Console; console = Console()
-from rich.traceback import install; install()
-from rich.pretty import pprint
 
 NUMBER_OF_REPLY = 10
 
@@ -494,7 +515,7 @@ class SessionRunner(object):
         while not self.done.is_set():
             try:
                 msg = await asyncio.to_thread(self.comq.get, timeout=0.1)
-                logger.info(f"SessionRunner message received: {msg}")
+                logger.debug(f"SessionRunner message received: {msg}")
                 # Process the message here
                 match msg:
                     case ("key", b"c"):
@@ -654,7 +675,7 @@ class Bbg(BbgServicer):
             # Get messages from the session's queue
             # async get from the queue
             try:
-                msg = await loop.run_in_executor(None, q.get)
+                msg = await loop.run_in_executor(None, subq.get)
             except asyncio.CancelledError:
                 await self.session.unsub(topicList)
                 logger.info("Subscription stream cancelled")
@@ -694,7 +715,7 @@ async def keypressDetector(comq, done):
         # Offload the blocking part to a different thread
         key = await asyncio.to_thread(check_keypress)
         if key is not None:
-            logger.info(f"Keypress detected: {key}")
+            logger.debug(f"Keypress detected: {key}")
         match key:
             case b'q':
                 print("Q pressed")
