@@ -333,8 +333,7 @@ class SessionRunner(object):
         if not self.session.start():
             logger.error("Failed to start session.")
         else:
-        # return all the details over gRPC
-        logger.debug(f"Session opened")
+            logger.debug(f"Session opened")
 
     async def close(self):
         """ close the session """
