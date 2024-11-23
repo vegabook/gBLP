@@ -38,6 +38,8 @@
             python312Packages.rich
             python312Packages.numpy
             python312Packages.pandas
+            python312Packages.psutil
+            python312Packages.pytest
             grpc-tools
             openssl_3_3
             certstrap

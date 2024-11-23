@@ -6,7 +6,7 @@ package bloomberg;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
-import "google/protobuf/any.proto";
+//import "google/protobuf/any.proto";
 //import "google/protobuf/wrappers.proto";
 import "google/protobuf/empty.proto";
 
@@ -119,7 +119,7 @@ message ReferenceDataResponse {
 }
 
 
-////////////////////////// Common to all callsData //////////////////////////
+////////////////////////// Common to all calls //////////////////////////
 
 // Top-level message containing all security data
 message Response {
@@ -134,7 +134,7 @@ message SecurityData {
     int32 sequenceNumber = 4;
     FieldData fieldData = 5;
     repeated FieldData timeData = 6;
-    SecurityError securityError = 7;
+    ErrorInfo securityError = 7;
 }
 
 // Placeholder for EIDData (empty since no data provided)
@@ -148,15 +148,6 @@ message FieldException {
 
 // Detailed error information
 message ErrorInfo {
-    string source = 1;
-    int32 code = 2;
-    string category = 3;
-    string message = 4;
-    string subcategory = 5;
-}
-
-// Error related to the security itself
-message SecurityError {
     string source = 1;
     int32 code = 2;
     string category = 3;
@@ -205,7 +196,7 @@ message IntradayBarRequest {
 }	
 
 message IntradayBarResponse {
-  google.protobuf.Any responseError = 1;
+  ErrorInfo responseError = 1;
   repeated IntradayBarData bars = 2;
 }
 
