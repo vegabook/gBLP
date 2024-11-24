@@ -27,30 +27,34 @@ Graduating this project to beta 0.1.0 (16 November 2024)
 * Looking for beta testers. You'll need access to a Bloomberg Terminal.
 
 ## Installation
-
-#### Server
-1. In a Microsoft Windows shell, Clone this repo and `cd gRPC`. 
-2. Ensure Python 3.10+ is installed and `pip install -r requirements.txt`.
-3. In the `src` directory you will find `server_gblp.py` which is your server. 
-4. You need the IP address of the machine running the Bloomberg Terminal. Get it with `ipconfig`.
-5. First you must generate a CA authority and keys: `python server_gblp.py --grpchost <your_ip> --gencerts`
-6. Then you can start the server: `python server_gblp.py --grpchost <your_ip> --grpcport 50051`
-
-#### Client
-An example Python client is provided which will say hello a few times and run a sample `historicalDataRequest`.
-It is also located in the `src` directory. Now you can be on a mac, on Linux, WSL, wherever. Naturally, 
-you will need access to the IP address of your server. 
-1. In a shell on your client machine, clone this repo and `cd gRPC/src`. 
-2. Ensure Python 3.10+ is installed and `pip install -r requirements.txt`.
-3. Run the client: `python client_gblp.py --grpchost <your_ip> --grpcport 50051`
+`pip install gBLP --extra-index-url https://blpapi.bloomberg.com/repository/releases/python/simple/`
+Generate security certificates with the following command. 
+`server_gblp --gencerts --grpchost <server_ip_or_hostname>`
+Here `localhost` is fine if you're staying on Windows on the same VM or machine, but otherwise you should use an IP address that is reachable from your client.
+Later you can `server_gblp --delcerts` to remove the certificates, or `--gencerts` to regenerate them.
+Done. You can now run the server and client.
 
 ## Usage
+#### Server. 
+In a Windows cmd or powershell terminal run `server_gblp --grpchost <server_ip_or_hostname>` where `<server_ip_or_hostname>` is what you specified when generating the certificates.
+on a machine with a Bloomberg Terminal.
 
-#### Functions
-* Delcerts
-* historicalDataRequest
-* intradayBarRequest
-* subscribe and unsubscribe to bars or ticks
+#### Client
+From a python REPL or script, on Windows, on WSL, or in a Linux VM, run the following code. This will not work if <server_ip_or_hostname> is not reachable from your client. Use `ping <server_ip_or_hostname>` from the client to check.
+```
+from gBLP.client_glp import Bbg
+bbg = Bbg(grpc_host="<server_ip_or_hostname>")
+test_hist = bbg.historicalDataRequest(["AAPL US Equity", "USDZAR Curncy"], ["PX_BID", "PX_ASK"])
+```
+When you're done, `bbg.close` will close the connection and clean up server side. Once closed, you cannot use the client again without reinstating it. 
+
+#### Client Methods
+* `historicalDataRequest`
+* `intradayBarRequest`
+* `referenceDataRequest`
+* `sub`
+* `unsub`
+* `subscriptionsInfo`
 
 Please also see the [licence](https://github.com/vegabook/gBLP/blob/main/src/bbg_copyright.txt) for the Bloomberg API code contained in this package. 
 

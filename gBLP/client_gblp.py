@@ -50,6 +50,7 @@ from gBLP.constants import (
 )
 
 # TODO FIRST RELEASE
+# * client open and close explicitly instead of on instantiation
 # * write tests
 # * write documentation
 # * write examples
