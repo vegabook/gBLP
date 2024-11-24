@@ -52,8 +52,8 @@ from gBLP.constants import (
 # TODO FIRST RELEASE
 # * client open and close explicitly instead of on instantiation
 # * write tests
-# * write documentation
 # * write examples
+# * write documentation
 # TODO FROLLOW UP RELEASE
 # * check UTC status (recall reference data request must have UTC TRUE specified)
 # * comq and process per client

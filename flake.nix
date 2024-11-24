@@ -42,6 +42,7 @@
             python312Packages.pytest
             python312Packages.poetry-core
             python312Packages.twine
+            poetry
             grpc-tools
             openssl_3_3
             certstrap
