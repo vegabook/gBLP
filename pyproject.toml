@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{ include = "gBLP" }]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 grpcio = "^1.68.0"
 grpcio-tools = "^1.68.0"
 ipython = "^8.29.0"
