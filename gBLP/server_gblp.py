@@ -329,6 +329,7 @@ class SessionRunner(object):
                                           eventHandler=self.handler.processEvent)
         if not self.session.start():
             logger.error("Failed to start session.")
+            self.done.set()
         else:
             logger.debug(f"Session opened")
 
@@ -500,7 +501,8 @@ class SessionRunner(object):
 
 
     async def listenComq(self):
-        """Listen for messages from the grpc handler"""
+        """Listen for messages from the grpc handler. This will also close
+        the session if the done event is set. """
         while not self.done.is_set():
             try:
                 msg = await asyncio.to_thread(self.comq.get, timeout=0.1)
@@ -530,7 +532,7 @@ class SessionRunner(object):
                 continue  # No message; keep looping
             except asyncio.CancelledError:
                 logger.info("CancelledError")
-                self.done.set
+                self.done.set()
                 break
             except Exception as e:
                 logger.error(f"Error in comq listener: {e}")
