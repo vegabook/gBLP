@@ -1,19 +1,9 @@
 # colorscheme aiseered dark
 
-
-# Copyright 2021 gRPC authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
+# ---------------------------- gBLP LICENCE ---------------------------------
+# Licensed under the GNU General Public License, Version 3.0 (the "License");
 # you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# ---------------------------------------------------------------------------
 
 import asyncio
 import threading
@@ -35,7 +25,6 @@ from gBLP.util.certMaker import get_conf_dir
 from gBLP.util.utils import makeName, printBeta
 import getpass
 import logging
-from colorama import Fore, Back, Style, init as colinit; colinit()
 from collections import deque, defaultdict
 import IPython
 from queue import Queue
@@ -67,7 +56,7 @@ ALL_FIELDS = allBbgFields.keys()
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--message', default='hello!')
-parser.add_argument('--grpchost', default='signaliser.com')
+parser.add_argument('--grpchost')
 parser.add_argument('--grpcport', default='50051')
 parser.add_argument('--grpckeyport', default='50052')
 parser.add_argument('--delcerts', action='store_true', default=False)
@@ -93,6 +82,10 @@ class Bbg:
 
         if not noBetaWarn:
             printBeta()
+        if not grpchost:
+            raise ValueError("grpchost must be specified.")
+        if not grpcport:
+            raise ValueError("grpcport must be specified.")
         # setup grpc
         self.name = makeName(alphaLength=6, digitLength=3)
         self.grpchost = grpchost
@@ -183,8 +176,8 @@ class Bbg:
         confdir = get_conf_dir()
         ihostandport = f"{self.grpchost}:{self.grpckeyport}"
         ichannel = grpc.aio.insecure_channel(ihostandport)
-        idkey = input("Certificates not found. Input ID key: ")
-        logger.info("Waiting for response from server...")
+                      idkey = input("Certificates not found. Identify yourself for the server (any string): ")
+        logger.info("Waiting for authorization response from server...")
         async with ichannel as chan:
             istub = bloomberg_pb2_grpc.KeyManagerStub(chan)
             try:
@@ -194,15 +187,17 @@ class Bbg:
             except grpc.aio.AioRpcError as e:
                 logger.info(f"Error: {e}")
                 return
-            # Make the confdir if it does not exist already
-            confdir.mkdir(parents=True, exist_ok=True)
-            with open(confdir / "client_certificate.pem", "wb") as f:
-                f.write(iresponse.cert)
-            with open(confdir / "client_private_key.pem", "wb") as f:
-                f.write(iresponse.key)
-            with open(confdir / "ca_certificate.pem", "wb") as f:
-                f.write(iresponse.cacert)
-        logger.info("Certificates written.")
+            if iresponse.authorised: 
+                confdir.mkdir(parents=True, exist_ok=True)
+                with open(confdir / "client_certificate.pem", "wb") as f:
+                    f.write(iresponse.cert)
+                with open(confdir / "client_private_key.pem", "wb") as f:
+                    f.write(iresponse.key)
+                with open(confdir / "ca_certificate.pem", "wb") as f:
+                    f.write(iresponse.cacert)
+                logger.info("Certificates written.")
+            else:
+                logger.warning(f"Authorization denied for reason {iresponse.reason}")
 
     def delCerts(self):
         """Delete certificates."""
@@ -302,7 +297,6 @@ class Bbg:
         return data
 
 
-
     def mtl(self, 
             topics, 
             fields=DEFAULT_FIELDS,
@@ -337,38 +331,13 @@ class Bbg:
         """ synchronous subscribe method """
         return self.loop_run_async(self.async_sub(topics, handler))
 
+
     async def async_sub(self, topics, handler):
         stream = self.stub.sub(topics, metadata=[("client", self.name)])
         self.streams.append(stream)
         self.loop_run_async_nowait(self.streamHandler(stream, handler))
         logger.info("Subscription stream started.")
         return topics 
-
-
-#    async def streamHandler(self, stream, handler, timeout=30):
-#        try:
-#            # Wrap the entire for loop with asyncio.wait_for to enforce a timeout on the whole loop
-#            async def loop_body():
-#                async for topic in stream:
-#                    try:
-#                        self.subsdata[topic.topic].append(topic)
-#                        if handler:
-#                            asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
-#                    except asyncio.CancelledError:
-#                        logger.info("streamHandler was cancelled.")
-#                        break
-#                    except Exception as e:
-#                        logger.error(f"Error in streamHandler: {e}")
-#
-#            # Run the loop_body coroutine with a timeout
-#            await asyncio.wait_for(loop_body(), timeout=timeout)
-#
-#        except asyncio.TimeoutError:
-#            logger.warning("streamHandler timed out.")
-#        except asyncio.CancelledError:
-#            logger.info("streamHandler was cancelled.")
-#        finally:
-#            logger.info("self.done is set. Exiting streamHandler.")
 
 
     async def streamHandler(self, stream, handler):

@@ -1,4 +1,10 @@
 # colorscheme cobalt dark
+""
+# ---------------------------- gBLP LICENCE ---------------------------------
+# Licensed under the GNU General Public License, Version 3.0 (the "License");
+# you may not use this file except in compliance with the License.
+# ---------------------------------------------------------------------------
+
 import gBLP.bloomberg_pb2 as bbpb2
 from rich.pretty import pprint
 

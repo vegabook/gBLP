@@ -243,6 +243,8 @@ message KeyResponse {
   bytes key = 1;
   bytes cert = 2;
   bytes cacert = 3;
+  bool authorised = 4;
+  string reason = 5;
 }
 
 

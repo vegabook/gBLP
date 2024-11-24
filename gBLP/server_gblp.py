@@ -1,18 +1,9 @@
 # colorscheme blue dark
 
-# Copyright 2021 gRPC authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
+# ---------------------------- gBLP LICENCE ---------------------------------
+# Licensed under the GNU General Public License, Version 3.0 (the "License");
 # you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# ---------------------------------------------------------------------------
 
 from gBLP.util.utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
 exitNotNT() # make sure we're on Windows otherwise exit. 
@@ -201,16 +192,17 @@ class KeyManager(KeyManagerServicer):
                          context: grpc.aio.ServicerContext) -> KeyResponse:
         logging.info("Serving keyRequest request %s", request)
         accept = await self.input_timeout((f"Received request from {context.peer()}"
-                        f" with id {request.id}. Accept? (y/n) "), 5)
+            f" with id {request.id}. Type Yes <Enter> within the next 10 seconds to authorise: "), 10)
         if accept is None:
-            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, "Request timed out")
-        if accept.lower() == "y":
+            return KeyResponse(authorised=False, reason="Server timed out")
+        if accept == "Yes":
             key, cert, cacert = make_client_certs(globalOptions.grpchost, get_conf_dir())
             bcacert = cacert.public_bytes(serialization.Encoding.PEM)
             logger.info(f"Key request granted for {request.id} and {context.peer()}")
-            return KeyResponse(key=key, cert=cert, cacert=bcacert)
+            return KeyResponse(key=key, cert=cert, cacert=bcacert, authorised=True)
         else:
-            context.abort(grpc.StatusCode.PERMISSION_DENIED, "Request denied")
+            print("Yes not typed. Denying request.")
+            return KeyResponse(authorised=False, reason="Request denied")
 
 
 async def serveBbgSession(bbgAioServer, bbgManager) -> None:
