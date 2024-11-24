@@ -6,7 +6,6 @@ authors = ["Thomas Browne <your_email@example.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [{ include = "gBLP" }]
-python = "^3.9"
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -25,10 +24,9 @@ pytest = "^8.3.3"
 # Dependencies that need a special index
 blpapi = { version = "^3.24.10", source = "bloomberg" }
 
-[tool.poetry.source]
+[[tool.poetry.source]]
 name = "bloomberg"
 url = "https://blpapi.bloomberg.com/repository/releases/python/simple/"
-default = false
 
 [tool.poetry.dev-dependencies]
 # Add any development dependencies here if needed, like linters or test frameworks.
@@ -36,6 +34,4 @@ default = false
 [build-system]
 requires = ["poetry-core>=1.5.0"]
 build-backend = "poetry.core.masonry.api"
-
-
 
