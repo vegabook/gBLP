@@ -774,11 +774,12 @@ def main():
         for f in confdir.glob("*.pem"):
             f.unlink()
         print("Deleted all certificates. Run --gencerts to make new ones.")
+    elif not globalOptions.grpchost:
+        console.print("[bold red]Must specify --grpchost xxxx where xxxx is server hostname or IP address.")
     else:
         printBeta()
         printLicence()
         try:
-            print(globalOptions)
             asyncio.run(asyncMain(globalOptions))
             logger.debug("asyncio main() exited")
         except KeyboardInterrupt:
