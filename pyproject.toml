@@ -33,6 +33,9 @@ twine = "^4.0.2"
 # Dependencies that need a special index
 blpapi = { version = "^3.24.10", source = "bloomberg" }
 
+[tool.poetry.scripts]
+gblp_server = "gBLP.gblp_server:main"
+
 [[tool.poetry.source]]
 name = "bloomberg"
 url = "https://blpapi.bloomberg.com/repository/releases/python/simple/"
