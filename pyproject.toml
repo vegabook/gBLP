@@ -31,7 +31,7 @@ pytest = "^8.3.3"
 twine = "^4.0.2"  
 
 # Dependencies that need a special index
-blpapi = { version = "^3.24.10", source = "bloomberg" }
+blpapi = { version = "^3.24.10", source = "bloomberg", markers = "sys_platform == 'win32'" }
 
 [tool.poetry.scripts]
 gblp_server = "gBLP.gblp_server:main"
