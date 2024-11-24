@@ -176,7 +176,7 @@ class Bbg:
         confdir = get_conf_dir()
         ihostandport = f"{self.grpchost}:{self.grpckeyport}"
         ichannel = grpc.aio.insecure_channel(ihostandport)
-                      idkey = input("Certificates not found. Identify yourself for the server (any string): ")
+        idkey = input("Certificates not found. Identify yourself for the server (any string): ")
         logger.info("Waiting for authorization response from server...")
         async with ichannel as chan:
             istub = bloomberg_pb2_grpc.KeyManagerStub(chan)
