@@ -1,5 +1,5 @@
 # colorscheme cobalt dark
-import bloomberg_pb2 as bb
+import gBLP.bloomberg_pb2 as bbpb2
 from rich.pretty import pprint
 
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -12,7 +12,7 @@ import logging; logger = logging.getLogger(__name__)
 
 
 def createValue(value):
-    val = bb.Value()
+    val =bbpb2.Value()
     if isinstance(value, float):
         val.doublevalue = value
     elif isinstance(value, int):
@@ -42,7 +42,7 @@ def createValue(value):
         for item in value:
             # Handle list of dicts
             if isinstance(item, dict):
-                mapVal = bb.Value()
+                mapVal =bbpb2.Value()
                 for k, v in item.items():
                     mapVal.mapvalue.fields[k].CopyFrom(createValue(v))
                 listValue.values.append(mapVal)
@@ -53,14 +53,14 @@ def createValue(value):
     return val
 
 def createFieldData(fieldDataDict):
-    fieldData = bb.FieldData()
+    fieldData =bbpb2.FieldData()
     for key, value in fieldDataDict.items():
         fieldValue = createValue(value)
         fieldData.fields[key].CopyFrom(fieldValue)
     return fieldData
 
 def createErrorInfo(errorInfoDict):
-    errorInfo = bb.ErrorInfo()
+    errorInfo =bbpb2.ErrorInfo()
     errorInfo.source = errorInfoDict.get("source", "")
     errorInfo.code = errorInfoDict.get("code", 0)
     errorInfo.category = errorInfoDict.get("category", "")
@@ -69,14 +69,14 @@ def createErrorInfo(errorInfoDict):
     return errorInfo
 
 def createFieldException(fieldExceptionDict):
-    fieldException = bb.FieldException()
+    fieldException =bbpb2.FieldException()
     fieldException.fieldId = fieldExceptionDict.get("fieldId", "")
     errorInfo = createErrorInfo(fieldExceptionDict.get("errorInfo", {}))
     fieldException.errorInfo.CopyFrom(errorInfo)
     return fieldException
 
 def createSecurityData(securityDataDict):
-    securityData = bb.SecurityData()
+    securityData =bbpb2.SecurityData()
     securityData.security = securityDataDict.get("security", "")
     securityData.sequenceNumber = securityDataDict.get("sequenceNumber", 0)
     # Handle fieldData
@@ -100,7 +100,7 @@ def createSecurityData(securityDataDict):
     return securityData
 
 def createResponse(dataList):
-    response = bb.Response()
+    response =bbpb2.Response()
     for item in dataList:
         securityData = createSecurityData(item)
         response.securitydata.append(securityData)
@@ -111,7 +111,7 @@ def buildReferenceDataResponse(data):
     """
     https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=164
     """
-    response = bb.ReferenceDataResponse()
+    response =bbpb2.ReferenceDataResponse()
     # may be multiple items if we had partial fills 
     for item in data:
         if item.get('responseError'):
@@ -131,7 +131,7 @@ def buildHistoricalDataResponse(data):
     """
     https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=170
     """
-    response = bb.HistoricalDataResponse()
+    response =bbpb2.HistoricalDataResponse()
     for sec in data:
         response.securitydata.append(createSecurityData(sec["securityData"]))
         if sec.get('securityError'):
@@ -144,7 +144,7 @@ def buildIntradayBarResponse(data):
     """
     https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=177
     """
-    response = bb.IntradayBarResponse()
+    response =bbpb2.IntradayBarResponse()
     for item in data:
         # althouth we might get a responseError _per item" (block of messages)
         # we're going to hoist such an error right into the top level response
@@ -156,7 +156,7 @@ def buildIntradayBarResponse(data):
             response.responseError.CopyFrom(err)
             break
         for bar in item["barData"]["barTickData"]:
-            barData = bb.IntradayBarData()
+            barData =bbpb2.IntradayBarData()
             barData.open = bar["open"]
             barData.high = bar["high"]
             barData.low = bar["low"]

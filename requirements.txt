@@ -1,12 +1,12 @@
-colorama
-cryptography
-msgpack
-websockets
-sockauth
-python-jose
-ipython
 grpcio
 grpcio-tools
-
-#blpapi # needs bloomberg url
+ipython
+certifi
+cryptography
+rich
+numpy
+pandas
+polars
+psutil
+pytest
 

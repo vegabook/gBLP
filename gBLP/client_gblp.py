@@ -18,12 +18,12 @@
 import asyncio
 import threading
 import grpc
-import bloomberg_pb2
-from bloomberg_pb2 import topicType
-from bloomberg_pb2 import subscriptionType
-from bloomberg_pb2 import allBbgFields
-from bloomberg_pb2 import statusType
-import bloomberg_pb2_grpc
+import gBLP.bloomberg_pb2 as bloomberg_pb2
+from gBLP.bloomberg_pb2 import topicType
+from gBLP.bloomberg_pb2 import subscriptionType
+from gBLP.bloomberg_pb2 import allBbgFields
+from gBLP.bloomberg_pb2 import statusType
+import gBLP.bloomberg_pb2_grpc as bloomberg_pb2_grpc
 import random
 from pathlib import Path
 import datetime as dt
@@ -31,8 +31,8 @@ import time
 import os
 import sys
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
-from util.certMaker import get_conf_dir
-from util.utils import makeName
+from gBLP.util.certMaker import get_conf_dir
+from gBLP.util.utils import makeName, printBeta
 import getpass
 import logging
 from colorama import Fore, Back, Style, init as colinit; colinit()
@@ -43,19 +43,18 @@ from rich.console import Console; console = Console()
 from google.protobuf import empty_pb2
 import json
 
-from constants import (
+from gBLP.constants import (
     MAX_MESSAGE_LENGTH, 
     PONG_SECONDS_TIMEOUT,
     DEFAULT_FIELDS,
 )
 
 # TODO FIRST RELEASE
-# * done is multiprocessing event not asyncio
-# * response errors check ("Any? acceptable?") FieldExceptions?
-# * camelcase subscription proto fields consistency
-# * commit, then simplify and lint in new branch
-# * check UTC status (recall reference data request must have UTC TRUE specified)
+# * write tests
+# * write documentation
+# * write examples
 # TODO FROLLOW UP RELEASE
+# * check UTC status (recall reference data request must have UTC TRUE specified)
 # * comq and process per client
 # * curve data request
 # * intraday tick request
@@ -81,14 +80,18 @@ logger = logging.getLogger(__name__)
 
 
 
+
 class Bbg:
     def __init__(self,
                  name=None,
                  grpchost=args.grpchost,
                  grpcport=args.grpcport,
                  grpckeyport=args.grpckeyport,
-                 maxdDequeSize = 10000):       # max size of deques each holding one topic
+                 maxdDequeSize = 10000, 
+                 noBetaWarn = False):       # max size of deques each holding one topic
 
+        if not noBetaWarn:
+            printBeta()
         # setup grpc
         self.name = makeName(alphaLength=6, digitLength=3)
         self.grpchost = grpchost

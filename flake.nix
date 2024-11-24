@@ -32,12 +32,12 @@
             python312Packages.grpcio
             python312Packages.grpcio-tools
             python312Packages.ipython
-            python312Packages.colorama
             python312Packages.certifi
             python312Packages.cryptography
             python312Packages.rich
             python312Packages.numpy
             python312Packages.pandas
+            python312Packages.polars
             python312Packages.psutil
             python312Packages.pytest
             grpc-tools
@@ -46,7 +46,16 @@
           ];
           shellHook = ''
             alias ipy="ipython --nosep"
+            alias exit="deactivate && exit"
             export PS1="🧢 \e[38;5;211m\]g\e[38;5;111mBLP\[\e[0m $PS1";
+            if [ ! -d venv ]; then
+              echo "Creating virtual environment in ./venv"
+              python -m venv venv
+            fi
+
+            # Activate the virtual environment
+            echo "Activating virtual environment"
+            source venv/bin/activate
           '';
         };
       });

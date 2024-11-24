@@ -6,11 +6,11 @@ import time
 import sys
 import json
 import logging; logger = logging.getLogger(__name__)
-from bloomberg_pb2 import IntradayBarResponse
-from bloomberg_pb2 import Topic
-from bloomberg_pb2 import FieldVal, FieldVals, Status
-from bloomberg_pb2 import BarVals, barType
-from bloomberg_pb2 import Status, statusType
+from gBLP.bloomberg_pb2 import IntradayBarResponse
+from gBLP.bloomberg_pb2 import Topic
+from gBLP.bloomberg_pb2 import FieldVal, FieldVals, Status
+from gBLP.bloomberg_pb2 import BarVals, barType
+from gBLP.bloomberg_pb2 import Status, statusType
 from google.protobuf.struct_pb2 import Value
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 

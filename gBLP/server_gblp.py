@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-assert os.name == "nt", "The gBLP server only runs on Windows"
+from gBLP.util.utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
+exitNotNT() # make sure we're on Windows otherwise exit. 
 
 from rich.console import Console
 from rich.pretty import pprint
@@ -54,28 +54,29 @@ import queue
 import blpapi
 import msvcrt
 import traceback
+import os
 
 import multiprocessing # no more thread leaking from blpapi. Wrap and shut. 
 from multiprocessing import Manager
 
 import grpc
-from bloomberg_pb2 import KeyRequestId, KeyResponse
-from bloomberg_pb2 import HistoricalDataRequest 
-from bloomberg_pb2 import HistoricalDataResponse
-from bloomberg_pb2 import IntradayBarRequest
-from bloomberg_pb2 import IntradayBarResponse
-from bloomberg_pb2 import ReferenceDataRequest
-from bloomberg_pb2 import ReferenceDataResponse 
-from bloomberg_pb2 import Topic
-from bloomberg_pb2 import TopicList
-from bloomberg_pb2 import topicType
-from bloomberg_pb2 import subscriptionType
+from gBLP.bloomberg_pb2 import KeyRequestId, KeyResponse
+from gBLP.bloomberg_pb2 import HistoricalDataRequest 
+from gBLP.bloomberg_pb2 import HistoricalDataResponse
+from gBLP.bloomberg_pb2 import IntradayBarRequest
+from gBLP.bloomberg_pb2 import IntradayBarResponse
+from gBLP.bloomberg_pb2 import ReferenceDataRequest
+from gBLP.bloomberg_pb2 import ReferenceDataResponse 
+from gBLP.bloomberg_pb2 import Topic
+from gBLP.bloomberg_pb2 import TopicList
+from gBLP.bloomberg_pb2 import topicType
+from gBLP.bloomberg_pb2 import subscriptionType
 
-from bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
-from bloomberg_pb2_grpc import add_BbgServicer_to_server, \
+from gBLP.bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
+from gBLP.bloomberg_pb2_grpc import add_BbgServicer_to_server, \
     add_KeyManagerServicer_to_server
 
-from responseParsers import (
+from gBLP.responseParsers import (
     buildHistoricalDataResponse, 
     buildIntradayBarResponse,
     buildReferenceDataResponse
@@ -90,17 +91,17 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 from pathlib import Path
 
-from util.SubscriptionOptions import \
+from gBLP.util.SubscriptionOptions import \
     addSubscriptionOptions, \
     setSubscriptionSessionOptions
-from util.ConnectionAndAuthOptions import \
+from gBLP.util.ConnectionAndAuthOptions import \
     addConnectionAndAuthOptions, \
     createSessionOptions
 
-from EventRouter import EventRouter
+from gBLP.EventRouter import EventRouter
 
-from util.certMaker import get_conf_dir, make_client_certs, make_all_certs
-from util.utils import makeName, printLicence, checkThreads
+from gBLP.util.certMaker import get_conf_dir, make_client_certs, make_all_certs
+from gBLP.util.utils import makeName, printLicence, checkThreads
 
 from cryptography.hazmat.primitives import serialization, hashes
 
@@ -753,7 +754,6 @@ async def main(globalOptions):
     bbgManager = Bbg(globalOptions, comq, done, manager)
     bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer, bbgManager))
     keyTask = asyncio.create_task(keySession(keyAioServer))
-    printLicence()
     console.print("[bold blue]--------------------------")
     console.print("[bold red on white blink]Press Q to stop the server")
     console.print("[bold blue]--------------------------")
@@ -772,6 +772,8 @@ async def main(globalOptions):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
+    printBeta()
+    printLicence()
     globalOptions = parseCmdLine()
     if globalOptions.gencerts:
         confdir = get_conf_dir()

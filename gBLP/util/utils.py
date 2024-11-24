@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.box import SQUARE
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 import logging; logger = logging.getLogger(__name__)
+import os
 
 def makeName(alphaLength, digitLength):
     """Make a dummy name if none provided."""
@@ -28,7 +29,6 @@ def checkThreads(colour = "magenta", processes = True):
         for proc in active_children():
             console.print((f"[bold {colour}]Name: {proc.name}, "
                            f"PID: {proc.pid}, Is Alive: {proc.is_alive()}[/bold {colour}]"))
-
     print("------------------------------------")
 
 
@@ -44,5 +44,21 @@ def printLicence():
                   "Bloomberg API terms. This software is licensed under the GPLv3, which means you "
                   "can use, modify, and share it freely, but any distributed modifications must "
                   "also remain open source under the same license.")
-    console.print(Panel(licencetxt, title="Licence and Disclaimer", box=SQUARE))
+    title = f"[bold grey50]LICENCE AND DISCLAIMER[/bold grey50]"
+    panel = Panel(licencetxt, title=title, box=SQUARE, style="grey50")
+    console.print(panel)
+
+def printBeta():
+    betatxt = ("This software is currently in beta testing. While it has been tested "
+               "extensively, there may still be bugs or issues that have not been discovered. "
+               "https://github.com/vegabook/gBLP/issues")
+    title = f"[bold orange1]BETA[/bold orange1]"
+    panel = Panel(betatxt, box=SQUARE, style="orange1", title=title)
+    console.print(panel)
+
+
+def exitNotNT():
+    if os.name != "nt":
+        console.print("gBLP server runs on Windows only.")
+        exit(1)
 
