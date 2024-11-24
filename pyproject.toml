@@ -34,7 +34,10 @@ twine = "^4.0.2"
 blpapi = { version = "^3.24.10", source = "bloomberg", markers = "sys_platform == 'win32'" }
 
 [tool.poetry.scripts]
-gblp_server = "gBLP.gblp_server:main"
+gblp_server = "gBLP.server_gblp:main"
+gblp-server = "gBLP.server_gblp:main"
+gblp_serve = "gBLP.serve_gblp:main"
+gblp-serve = "gBLP.serve_gblp:main"
 
 [[tool.poetry.source]]
 name = "bloomberg"

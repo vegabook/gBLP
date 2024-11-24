@@ -100,7 +100,7 @@ from gBLP.util.ConnectionAndAuthOptions import \
 
 from gBLP.EventRouter import EventRouter
 
-from gBLP.util.certMaker import get_conf_dir, make_client_certs, make_all_certs
+from gBLP.util.certMaker import get_conf_dir, make_client_certs, make_all_certs, check_for_certs
 from gBLP.util.utils import makeName, printLicence, checkThreads
 
 from cryptography.hazmat.primitives import serialization, hashes
@@ -109,7 +109,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 
 # ----------------- global variables ----------------------
 
-
+globalOptions = None
 
 NUMBER_OF_REPLY = 10
 
@@ -218,17 +218,7 @@ async def serveBbgSession(bbgAioServer, bbgManager) -> None:
     listenAddr = f"{globalOptions.grpchost}:{globalOptions.grpcport}"
     add_BbgServicer_to_server(bbgManager, bbgAioServer)
 
-    # first check if the certs are there
     confdir = get_conf_dir()
-    if not ((confdir / "server_certificate.pem").exists() and \
-            (confdir / "server_private_key.pem").exists() and \
-            (confdir / "ca_certificate.pem").exists()):
-        yn = input("Certificates not found. Make them? (y/n) ")
-        if yn.lower() == "y":
-            make_all_certs(str(globalOptions.grpchost), confdir)
-        else:
-            print("Exiting.")
-
 
     # Load server's certificate and private key
     with open(confdir / "server_certificate.pem", "rb") as f:
@@ -255,7 +245,7 @@ async def serveBbgSession(bbgAioServer, bbgManager) -> None:
     #raise # propagate
 
 
-async def keySession(keyAioServer) -> None:
+async def serveKeySession(keyAioServer) -> None:
 
     keyListenAddr = f"{globalOptions.grpchost}:{globalOptions.grpckeyport}"
     add_KeyManagerServicer_to_server(KeyManager(), keyAioServer)
@@ -744,7 +734,7 @@ def check_keypress():
     return None
 
 
-async def main(globalOptions):
+async def asyncMain(globalOptions):
     bbgAioServer = grpc.aio.server()
     keyAioServer = grpc.aio.server()
     manager = Manager()
@@ -753,7 +743,7 @@ async def main(globalOptions):
     done = manager.Event()
     bbgManager = Bbg(globalOptions, comq, done, manager)
     bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer, bbgManager))
-    keyTask = asyncio.create_task(keySession(keyAioServer))
+    keyTask = asyncio.create_task(serveKeySession(keyAioServer))
     console.print("[bold blue]--------------------------")
     console.print("[bold red on white blink]Press Q to stop the server")
     console.print("[bold blue]--------------------------")
@@ -770,23 +760,35 @@ async def main(globalOptions):
     os._exit(0)
 
 
-if __name__ == "__main__":
+def main():
+    global globalOptions
     logging.basicConfig(level=logging.DEBUG)
-    printBeta()
-    printLicence()
     globalOptions = parseCmdLine()
     if globalOptions.gencerts:
-        confdir = get_conf_dir()
-        make_all_certs(str(globalOptions.grpchost), confdir)
+        if not globalOptions.grpchost:
+            print(("Must specify --grpchost xxxx where xxx is server hostname or IP address "
+                   "when using --gencerts."))
+            return
+        else:
+            confdir = get_conf_dir()
+            make_all_certs(str(globalOptions.grpchost), confdir)
+    elif not check_for_certs():
+        print(("Secure TLS/SSL credentials not found. to create them: "
+              "server_gblp --gencerts --grpchost xxxx "
+              "where xxxx is the server hostname or IP address."))
+        return
     elif globalOptions.delcerts:
         confdir = get_conf_dir()
         for f in confdir.glob("*.pem"):
             f.unlink()
         print("Deleted all certificates. Run --gencerts to make new ones.")
     else:
+        printBeta()
+        printLicence()
         try:
-            asyncio.run(main(globalOptions))
-            logger.info("asyncio main() exited")
+            print(globalOptions)
+            asyncio.run(asyncMain(globalOptions))
+            logger.debug("asyncio main() exited")
         except KeyboardInterrupt:
             print("Keyboard interrupt")
             console.print("[bold magenta on white]You should press <Enter> to stop the server.")
@@ -801,3 +803,7 @@ if __name__ == "__main__":
                     console.print(f"[bold magenta]Thread {th.name} is still running[/bold magenta]")
             console.print("[bold green on white]os._exit(0)")
             os._exit(1)
+
+
+if __name__ == "__main__":
+    main()

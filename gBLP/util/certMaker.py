@@ -207,11 +207,29 @@ def get_conf_dir():
     return Path.home() / ".config/gBLP"
 
 
+def check_for_certs(outdir = get_conf_dir()):
+    # check if certs exist in outdir
+    if not (outdir / "ca_private_key.pem").exists():
+        return False
+    if not (outdir / "ca_certificate.pem").exists():
+        return False
+    if not (outdir / "server_private_key.pem").exists():
+        return False
+    if not (outdir / "server_certificate.pem").exists():
+        return False
+    if not (outdir / "client_private_key.pem").exists():
+        return False
+    if not (outdir / "client_certificate.pem").exists():
+        return False
+    return True
+
+
 def make_all_certs(hostname, outdir = get_conf_dir()):
     # make CA authority, make cerver certs, make client certs, 
     # save to outdir
     if hostname is None or hostname == "None" or hostname == "":
-        print("Hostname cannot be None or empty.")
+        print(("Hostname cannot be None or empty. Use --grpchost xxxx option "
+               "where xxxx is the server hostname or IP address"))
         return
     outdir = get_conf_dir()
     outdir.mkdir(parents=True, exist_ok=True)
