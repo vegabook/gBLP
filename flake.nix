@@ -40,7 +40,7 @@
             python312Packages.polars
             python312Packages.psutil
             python312Packages.pytest
-            python312Packages.poetry
+            python312Packages.poetry-core
             python312Packages.twine
             grpc-tools
             openssl_3_3
