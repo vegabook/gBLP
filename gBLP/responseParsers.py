@@ -15,6 +15,7 @@ from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 import datetime as dt
 import time
 import json
+import blpapi
 
 import logging; logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def getTimeStamp():
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def makeBarMessage(self, msg, correlators):
+def makeBarMessage(msg, correlators):
     """ make a bar message """
     cid = msg.correlationId().value() # 
     topic = bbpb2.Topic()

@@ -452,10 +452,7 @@ if __name__ == "__main__":
 
         handler1 = HandlerStatusDot("blue")
         subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs1)
-        IPython.embed()
-        os._exit(0)
-
+        #bbg.sub(subs1)
 
         handler2 = Handler("red")
         subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
@@ -463,7 +460,7 @@ if __name__ == "__main__":
 
         handler3 = Handler("blue")
         subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs3, handler = handler3)
+        #bbg.sub(subs3, handler = handler3)
 
         fx = [
             "EURUSD Curncy",
@@ -499,16 +496,7 @@ if __name__ == "__main__":
         ]
         handler4 = HandlerTime()
         subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs4, handler = handler4)
-
-        import csv
-        with open("/home/tbrowne/scratch/cusip.csv") as f:
-            reader = csv.reader(f)
-            tickers = [x[1] + " BGN Corp" for x in list(reader)]
-        subtickers = tickers[-100:]
-        handler5 = HandlerTimeBars()
-        subs5 = bbg.mtl(subtickers, ["LAST_PRICE"], bar=True, interval = 1)
-        bbg.sub(subs5)
+        #bbg.sub(subs4, handler = handler4)
 
 
         #---------------------------- request responses ----------------------------
@@ -519,7 +507,6 @@ if __name__ == "__main__":
             dt.datetime(2023, 11, 28),
             dt.datetime(2024, 11, 30)
         )
-
 
 
         data["ref"] = bbg.referenceDataRequest(topics = ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy", "WACKO Zillion", 

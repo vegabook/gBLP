@@ -23,6 +23,9 @@ class CustomRichHandler(RichHandler):
         if record.levelno == logging.ERROR:
             # Print the entire formatted log entry in red
             console.print(f"[bold red]{log_entry}[/bold red]")
+        elif record.levelno == logging.WARNING:
+            # Print the entire formatted log entry in yellow
+            console.print(f"[yellow2]{log_entry}[/yellow2]")
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -353,6 +356,12 @@ class SessionRunner(object):
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
             return []
+        dtstart = request.start.ToDatetime().strftime("%Y%m%d")
+        dtend = request.end.ToDatetime().strftime("%Y%m%d")
+        requestDict = {"securities": request.topics,
+                       "fields": request.fields,
+                       "startDate": dtstart,
+                       "endDate": dtend} # TODO OVERRIDES
         bbgRequest.fromPy(requestDict)
         # create a random 32-character string as the correlationId
         corrString = f"hist:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"

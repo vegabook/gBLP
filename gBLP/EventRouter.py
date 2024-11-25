@@ -50,10 +50,23 @@ class EventRouter(object):
     def processSubscriptionStatus(self, event):
         for msg in event:
             cid, topic = makeStatusMessage(msg, self.parent.correlators)
-            if topic.status.statustype == statusType.SubscriptionTerminated:
-                self.parent.correlators.pop(cid)
-                # send messages to all connected clients on subscription
-            self.simplesend(cid, ("status", topic.SerializeToString()))
+            match topic.status.statustype:
+                case statusType.SubscriptionFailure:
+                    console.print(f"[bold red]{statusType.Name(topic.status.statustype)}[/bold red]", end = " ")
+                    logger.info(f"Received subscription failure status: {statusType.Name(topic.status.statustype)}")
+                    self.simplesend(cid, ("status", topic.SerializeToString()))
+                    self.parent.correlators.pop(cid) # pop only after simplesend
+                case statusType.SubscriptionStarted:
+                    console.print(f"[bold green]{statusType.Name(topic.status.statustype)}[/bold green]", end = " ")
+                    logger.info(f"Received subscription started status: {statusType.Name(topic.status.statustype)}")
+                    self.simplesend(cid, ("status", topic.SerializeToString()))
+                case statusType.SubscriptionTerminated:
+                    console.print(f"[bold gold3]{statusType.Name(topic.status.statustype)}[/bold gold3]", end = " ")
+                    logger.info(f"Received subscription terminated status: {statusType.Name(topic.status.statustype)}")
+                    self.simplesend(cid, ("status", topic.SerializeToString()))
+                    self.parent.correlators.pop(cid)
+                case _:
+                    self.simplesend(cid, ("status", topic.SerializeToString()))
 
 
     def processMiscEvents(self, event):
@@ -71,7 +84,6 @@ class EventRouter(object):
                 logger.info(f"Received miscellaneous status: {statusstr}")
             console.print(f"[bold green]{statusstr}[/bold green]", end = " ")
             logger.info(f"Received miscellaneous status: {statusstr}")
-
 
 
     def processSubscriptionDataEvent(self, event):
@@ -95,7 +107,7 @@ class EventRouter(object):
                     self.simplesend(cid, ("tick", topic.SerializeToString()))
             # something else --->
             else:
-                logger.warning(f"!!!!!!!!!!!!!!!! Unknown message type {msgtype}") # DEBUG
+                logger.debug(f"!!!!!!!!!!!!!!!! Unknown message type {msgtype}") # DEBUG
 
 
     def processEvent(self, event, _session):
@@ -112,8 +124,6 @@ class EventRouter(object):
                         if msg.messageType == blpapi.Names.REQUEST_FAILURE:
                             reason=msg.getElement("reason")
                             print(f"Request failed: {reason}")
-                            done = True
-                        done = True
                 case blpapi.Event.SUBSCRIPTION_DATA:
                     self.processSubscriptionDataEvent(event)
                 case blpapi.Event.SUBSCRIPTION_STATUS:
@@ -121,5 +131,5 @@ class EventRouter(object):
                 case _:
                     self.processMiscEvents(event)
         except blpapi.Exception as e:
-            print(f"Failed to process event {event}: {e}")
+            logger.warn("Failed to process event {event}: {e}")
         return False
