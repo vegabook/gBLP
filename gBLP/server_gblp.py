@@ -63,6 +63,7 @@ from gBLP.bloomberg_pb2 import TopicList
 from gBLP.bloomberg_pb2 import topicType
 from gBLP.bloomberg_pb2 import subscriptionType
 
+
 from gBLP.bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
 from gBLP.bloomberg_pb2_grpc import add_BbgServicer_to_server, \
     add_KeyManagerServicer_to_server
@@ -352,14 +353,6 @@ class SessionRunner(object):
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
             return []
-        logger.info(f"setting securities {request.topics}")
-        dtstart = request.start.ToDatetime().strftime("%Y%m%d")
-        dtend = request.end.ToDatetime().strftime("%Y%m%d")
-        for t in request.topics:
-            requestDict = {"securities": request.topics,
-                           "fields": request.fields,
-                           "startDate": dtstart,
-                           "endDate": dtend} # TODO OVERRIDES
         bbgRequest.fromPy(requestDict)
         # create a random 32-character string as the correlationId
         corrString = f"hist:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"
@@ -470,13 +463,16 @@ class SessionRunner(object):
         for v in self.correlators.values():
             if v["clientid"] == clientid:
                 tl.topics.append(v["topic"])
-        q.put(tl)
+        q.put(tl.SerializeToString())
 
 
-    async def unsub(self, topicList: TopicList):
+    async def unsub(self, topicList: TopicList, unsubIsCancel = False):
         """ unsubscribe from a list of topics. Note removal from the 
         correlators only happens when the event handler receives the
-        unsubscription event """
+        unsubscription event.
+        unsubIsCancel is to differentiate between explicit cancellation
+        and stream cancellation termination where all initial correlators will be sent
+        and some may have been unsubbed already, so don't warn about them"""
         _success, barservice = self._getService("BarSubscribe")
         _success, tickservice = self._getService("Subscribe")
         substrings = [] # will refer to these later to make sure unsubbed
@@ -487,15 +483,19 @@ class SessionRunner(object):
             else:
                 service = self.servicesOpen["Subscribe"]
             substring = self.makeCorrelatorString(t, service)
-            logger.info(f"Unsubscribing {substring}")
             correlator = self.correlators.get(substring)
             if not correlator:
-                logger.error(f"Correlator not found for {substring}")
+                if not unsubIsCancel: # broad based stream cancellation unsub so may not be there
+                    logger.warning(f"Correlator not found for {substring}")
                 continue
-            substrings.append(substring)
-            correlid = correlator["correlid"]
-            bbgunsublist.add(substring, correlationId=correlid) 
+            else:
+                logger.info(f"Unsubscribing {substring}")
+                substrings.append(substring)
+                correlid = correlator["correlid"]
+                bbgunsublist.add(substring, correlationId=correlid) 
         if substrings:
+            print(bbgunsublist)
+            print(substrings)
             self.session.unsubscribe(bbgunsublist)
 
 
@@ -514,16 +514,24 @@ class SessionRunner(object):
                             console.print(f"[cyan]{k}")
                     case ("key", b"t"):
                         checkThreads(processes=False, colour="green")
-                    case ("request", "historicalDataRequest", (request, q, clientid)):
+                    case ("request", "historicalDataRequest", (serquest, q, clientid)):
+                        request = HistoricalDataRequest.FromString(serquest)
                         await self.historicalDataRequest(request, q, clientid)
-                    case ("request", "intradayBarRequest", (request, q, clientid)):
+                    case ("request", "intradayBarRequest", (serquest, q, clientid)):
+                        request = IntradayBarRequest.FromString(serquest)
                         await self.intradayBarRequest(request, q, clientid)
-                    case ("request", "referenceDataRequest", (request, q, clientid)):
+                    case ("request", "referenceDataRequest", (serquest, q, clientid)):
+                        request = ReferenceDataRequest.FromString(serquest)
                         await self.referenceDataRequest(request, q, clientid)
-                    case ("request", "sub", (topicList, subq, clientid)):
+                    case ("request", "sub", (serquest, subq, clientid)):
+                        topicList = TopicList.FromString(serquest)
                         await self.sub(topicList, subq, clientid)
-                    case ("request", "unsub", (topicList,)):
+                    case ("request", "unsub", (serquest,)):
+                        topicList = TopicList.FromString(serquest)
                         await self.unsub(topicList)
+                    case ("request", "unsubcancel", (serquest,)):
+                        topicList = TopicList.FromString(serquest)
+                        await self.unsub(topicList, unsubIsCancel=True)
                     case ("request", "subscriptionInfo", (clientid, q)):
                         tlist = await self.subscriptionInfo(clientid, q)
                     case ("request", "close"):
@@ -596,7 +604,8 @@ class Bbg(BbgServicer):
         logger.info(f"Received historical data request {topicstr} from {clientid}")
         q = self.manager.Queue()
         messageList = []
-        self.comq.put(("request", "historicalDataRequest", (request, q, clientid)))
+        serquest = request.SerializeToString()
+        self.comq.put(("request", "historicalDataRequest", (serquest, q, clientid)))
         loop = asyncio.get_event_loop()
         while True:
             # get from multprocessing queue from async
@@ -617,7 +626,8 @@ class Bbg(BbgServicer):
         logger.info(f"Received intraday bar request {str(request.topic)} from {clientid}")
         q = self.manager.Queue()
         messageList = []
-        self.comq.put(("request", "intradayBarRequest", (request, q, clientid)))
+        serquest = request.SerializeToString()
+        self.comq.put(("request", "intradayBarRequest", (serquest, q, clientid)))
         loop = asyncio.get_event_loop()
         while True:
             msg = await loop.run_in_executor(None, q.get)
@@ -637,7 +647,8 @@ class Bbg(BbgServicer):
         logger.info(f"Received reference data request {topicstr} from {clientid}")
         q = self.manager.Queue()
         messageList = []
-        self.comq.put(("request", "referenceDataRequest", (request, q, clientid)))
+        serquest = request.SerializeToString()
+        self.comq.put(("request", "referenceDataRequest", (serquest, q, clientid)))
         loop = asyncio.get_event_loop()
         while True:
             msg = await loop.run_in_executor(None, q.get)
@@ -657,28 +668,31 @@ class Bbg(BbgServicer):
         topicstr = ",".join([t.topic for t in topicList.topics])
         logger.info(f"Received subscription request {topicstr} from {clientid}")
         subq = self.manager.Queue()
-        self.comq.put(("request", "sub", (topicList, subq, clientid)))
+        serquest = topicList.SerializeToString()
+        self.comq.put(("request", "sub", (serquest, subq, clientid)))
         loop = asyncio.get_event_loop()
         while not self.done.is_set():
             # Get messages from the session's queue
             # async get from the queue
             try:
-                msg = await loop.run_in_executor(None, subq.get)
+                msgtype, msg = await loop.run_in_executor(None, subq.get)
             except asyncio.CancelledError:
                 logger.info("Subscription stream cancelled, unsubscribing.")
-                self.comq.put(("request", "unsub", (topicList, subq, clientid)))
+                self.comq.put(("request", "unsubcancel", (serquest,)))
                 break
             except Exception as e:
                 logger.error(f"Error in subscription stream {e}")
                 break
-            yield msg
+            yield Topic.FromString(msg)
         logger.info("Subscription stream closed")
 
 
     async def unsub(self, topicList: TopicList, context: grpc.aio.ServicerContext):
         clientid = self.makeClientID(context)
-        logger.info(f"Unsubscribing {topicList} for {clientid}")
-        self.comq.put(("request", "unsub", (topicList,)))
+        topicstr = ",".join([t.topic for t in topicList.topics])
+        logger.info(f"Received unsubscription request {topicstr} from {clientid}")
+        serquest = topicList.SerializeToString()
+        self.comq.put(("request", "unsub", (serquest,)))
         return empty_pb2.Empty()
 
 
@@ -691,7 +705,7 @@ class Bbg(BbgServicer):
         logger.info(f"Received subscription info request from {clientid}")
         loop = asyncio.get_event_loop()
         tlist = await loop.run_in_executor(None, q.get)
-        return tlist
+        return TopicList.FromString(tlist)
 
     async def close(self):
         self.comq.put(("key", b"q"))

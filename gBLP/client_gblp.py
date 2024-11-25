@@ -39,6 +39,7 @@ from gBLP.constants import (
 )
 
 # TODO FIRST RELEASE
+# * subscription status does not contain the topic
 # * client open and close explicitly instead of on instantiation
 # * write tests
 # * write examples
@@ -69,6 +70,13 @@ logging.basicConfig(level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 
+def delCerts():
+    """Delete certificates."""
+    confdir = get_conf_dir()
+    for f in ["client_certificate.pem", "client_private_key.pem", "ca_certificate.pem"]:
+        if (confdir / f).exists():
+            (confdir / f).unlink()
+    logger.info("Certificates deleted.")
 
 
 class Bbg:
@@ -95,6 +103,7 @@ class Bbg:
 
         # setup dictionaries for subscription data
         self.subsdata = defaultdict(lambda: deque(maxlen = maxdDequeSize)) # store subscription data
+        self.statusdata = deque(maxlen = maxdDequeSize)
 
         # Start the event loop in a separate thread
         self.loop = asyncio.new_event_loop()
@@ -199,13 +208,6 @@ class Bbg:
             else:
                 logger.warning(f"Authorization denied for reason {iresponse.reason}")
 
-    def delCerts(self):
-        """Delete certificates."""
-        confdir = get_conf_dir()
-        for f in ["client_certificate.pem", "client_private_key.pem", "ca_certificate.pem"]:
-            if (confdir / f).exists():
-                (confdir / f).unlink()
-        logger.info("Certificates deleted.")
 
 
     def check_connection(self):
@@ -343,11 +345,14 @@ class Bbg:
     async def streamHandler(self, stream, handler):
         async for topic in stream:
             try:
-                self.subsdata[topic.topic].append(topic)
-                #if handler:
-                #    asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
-                #if self.done.is_set():
-                #    break
+                if topic.HasField("status"):
+                    self.statusdata.append(topic)
+                elif topic.HasField("barvals") or topic.HasField("fieldvals"):
+                    self.subsdata[topic.topic].append(topic)
+                if handler:
+                    asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
+                if self.done.is_set():
+                    break
             except asyncio.CancelledError:
                 logger.info("streamHandler was cancelled.")
                 break
@@ -440,8 +445,7 @@ if __name__ == "__main__":
 
     # TODO move certs into another class
     if args.delcerts:
-        bbg = Bbg()
-        bbg.delCerts()
+        delCerts()
     else:
         data = dict()
         bbg = Bbg()
@@ -450,6 +454,7 @@ if __name__ == "__main__":
         subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
         bbg.sub(subs1)
         IPython.embed()
+        os._exit(0)
 
 
         handler2 = Handler("red")
