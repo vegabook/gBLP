@@ -256,6 +256,9 @@ class Bbg:
                            end = dt.datetime.now(),
                            interval = 1, 
                            options = None) -> bloomberg_pb2.IntradayBarResponse:
+        if not type(topic) == str:
+            logger.error("Topic must be a string.")
+            return
         return self.loop_run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
 
     async def async_intradayBarRequest(self, 
@@ -283,6 +286,13 @@ class Bbg:
                              topics,
                              fields,
                              overrides = None) -> bloomberg_pb2.ReferenceDataResponse:
+
+        if not type(topics) == list:
+            logger.error("Topics must be a list.")
+            return
+        if not type(fields) == list:
+            logger.error("Fields must be a list.")
+            return
         return self.loop_run_async(self.async_referenceDataRequest(topics, fields, overrides))
 
     async def async_referenceDataRequest(self,

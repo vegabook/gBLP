@@ -8,13 +8,10 @@
 from gBLP.util.utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
 exitNotNT() # make sure we're on Windows otherwise exit. 
 
-from rich.console import Console
+from rich.console import Console; console = Console()
 from rich.pretty import pprint
 from rich.logging import RichHandler
 import logging
-
-# Create a Rich console instance
-console = Console()
 
 class CustomRichHandler(RichHandler):
     def emit(self, record):
@@ -35,7 +32,7 @@ logger = logging.getLogger(__name__)  # Get the current module's logger
 custom_handler = CustomRichHandler()
 logger.addHandler(custom_handler)  # Add the custom handler
 
-
+# python imports
 import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import string
 import random
@@ -49,10 +46,12 @@ import blpapi
 import msvcrt
 import traceback
 import os
-
+from pathlib import Path
 import multiprocessing # no more thread leaking from blpapi. Wrap and shut. 
 from multiprocessing import Manager
+from cryptography.hazmat.primitives import serialization, hashes 
 
+# gRPC imports
 import grpc
 from gBLP.bloomberg_pb2 import KeyRequestId, KeyResponse
 from gBLP.bloomberg_pb2 import HistoricalDataRequest 
@@ -65,7 +64,6 @@ from gBLP.bloomberg_pb2 import Topic
 from gBLP.bloomberg_pb2 import TopicList
 from gBLP.bloomberg_pb2 import topicType
 from gBLP.bloomberg_pb2 import subscriptionType
-
 
 from gBLP.bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
 from gBLP.bloomberg_pb2_grpc import add_BbgServicer_to_server, \
@@ -84,30 +82,26 @@ from google.protobuf import empty_pb2
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 
-from pathlib import Path
 
-from gBLP.util.SubscriptionOptions import \
-    addSubscriptionOptions, \
+from gBLP.util.SubscriptionOptions import (
+    addSubscriptionOptions, 
     setSubscriptionSessionOptions
-from gBLP.util.ConnectionAndAuthOptions import \
-    addConnectionAndAuthOptions, \
+)
+
+from gBLP.util.ConnectionAndAuthOptions import (
+    addConnectionAndAuthOptions, 
     createSessionOptions
+)   
 
 from gBLP.EventRouter import EventRouter
 
 from gBLP.util.certMaker import get_conf_dir, make_client_certs, make_all_certs, check_for_certs
 from gBLP.util.utils import makeName, printLicence, checkThreads
 
-from cryptography.hazmat.primitives import serialization, hashes
-
-
 
 # ----------------- global variables ----------------------
 
 globalOptions = None
-
-NUMBER_OF_REPLY = 10
-
 
 # ----------------- thread creation tracking ----------------------
 def trace_function(frame, event, arg):
@@ -422,6 +416,66 @@ class SessionRunner(object):
         self.session.sendRequest(bbgRequest, correlationId=correlid)
 
 
+    # -------------- DEBUG ---------------
+
+    async def serviceInfo(self):
+        """ get the service info """
+        for service in self.servicesAvail.keys():
+            try:
+                console.print(f"[bold blue]Service {service}")
+                succes, req = self._createEmptyRequest(service)
+                info = req.asElement().elementDefinition()
+                console.print(f"[bold orange1]{dir(info)}") 
+                print(info.toString())
+            except Exception as e:
+                logger.error(f"Error in service info: {e}")
+                # print full trace
+                traceback.print_exc()
+
+    # -------------- !DEBUG ---------------
+
+
+
+
+    def open(self):
+        """ open the session and associated services """
+        # setup the correct options
+        sessionOptions = createSessionOptions(self.options)
+        sessionOptions.setMaxEventQueueSize(self.maxEventQueueSize)
+        self.handler = EventRouter(parent = self)
+        if self.numDispatcherThreads > 1:
+            self.eventDispatcher = blpapi.EventDispatcher(numDispatcherThreads=self.numDispatcherThreads) 
+            self.eventDispatcher.start()
+            self.session = blpapi.Session(sessionOptions, 
+                                          eventHandler=self.handler.processEvent,
+                                          eventDispatcher=self.eventDispatcher)
+        else:
+            self.session = blpapi.Session(sessionOptions, 
+                                          eventHandler=self.handler.processEvent)
+        if not self.session.start():
+            logger.error("Failed to start session.")
+            self.done.set()
+        else:
+            logger.debug(f"Session opened")
+
+    def close(self):
+        """ close the session """
+        self.session.stop()
+        if self.numDispatcherThreads > 1:
+            self.eventDispatcher.stop()
+        if not self.comqTask.done():
+            logger.info("Cancelling comq listener")
+            self.comqTask.cancel()
+        logger.info(f"Bloomberg session closed")
+
+
+    async def historicalDataRequest(self, request: HistoricalDataRequest, 
+                                    q: multiprocessing.Queue,
+                                    clientid: string) -> list:
+        """ request historical data """
+        logger.info(f"Requesting historical data {request}")
+        success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
+
 
     # ------------ subscriptions -------------------
 
@@ -523,6 +577,8 @@ class SessionRunner(object):
                             console.print(f"[cyan]{k}")
                     case ("key", b"t"):
                         checkThreads(processes=False, colour="green")
+                    case ("key", b"i"): # DEBUG
+                        await self.serviceInfo()
                     case ("request", "historicalDataRequest", (serquest, q, clientid)):
                         request = HistoricalDataRequest.FromString(serquest)
                         await self.historicalDataRequest(request, q, clientid)
@@ -559,7 +615,7 @@ class SessionRunner(object):
 
 
             
-# ----------------- multiple sessions are managed here ----------------------
+# ----------------- gRPC method implementations ----------------------
 
 def runSessionRunner(options, comq, done):
 
@@ -721,6 +777,8 @@ class Bbg(BbgServicer):
         self.sessionProc.terminate()
 
 
+# ----------------- keypress management----------------------
+
 async def keypressDetector(comq, done):
     while not done.is_set():
         # Offload the blocking part to a different thread
@@ -728,15 +786,16 @@ async def keypressDetector(comq, done):
         if key is not None:
             logger.debug(f"Keypress detected: {key}")
         match key:
-            case b'q':
+            case b"q":
                 print("Q pressed")
                 done.set()
-            case b't':
+            case b"t":
                 checkThreads()
                 comq.put(("key", b"t"))
-            case b'c':
-                # TODO fix the comq below
+            case b"c":
                 comq.put(("key", b"c"))
+            case b"i": # DEBUG
+                comq.put(("key", b"i"))
             case None:
                 pass
         await asyncio.sleep(0.2)
@@ -749,6 +808,9 @@ def check_keypress():
         key = msvcrt.getch()
         return key
     return None
+
+
+# ----------------- mains ----------------------
 
 
 async def asyncMain(globalOptions):

@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "gblp"
-version = "0.1.0"
+version = "0.1.1"
 description = "A project for working with Bloomberg and gRPC"
-authors = ["Thomas Browne <your_email@example.com>"]
+authors = ["Thomas Browne"]
 license = "GPL-3.0-or-later"
 readme = "README.md"
 packages = [{ include = "gBLP" }]
@@ -11,6 +11,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent"
 ]
@@ -29,8 +30,6 @@ polars = "^1.14.0"
 psutil = "^6.1.0"
 pytest = "^8.3.3"
 twine = "^4.0.2"  
-
-# Dependencies that need a special index
 blpapi = { version = "^3.24.10", source = "bloomberg", markers = "sys_platform == 'win32'" }
 
 [tool.poetry.scripts]
