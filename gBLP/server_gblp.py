@@ -103,6 +103,8 @@ from gBLP.util.utils import makeName, printLicence, checkThreads
 
 globalOptions = None
 
+from gBLP.constants import DEFAULT_FIELDS
+
 # ----------------- thread creation tracking ----------------------
 def trace_function(frame, event, arg):
     """Trace function that will be called for every line of code in every thread."""
@@ -469,14 +471,6 @@ class SessionRunner(object):
         logger.info(f"Bloomberg session closed")
 
 
-    async def historicalDataRequest(self, request: HistoricalDataRequest, 
-                                    q: multiprocessing.Queue,
-                                    clientid: string) -> list:
-        """ request historical data """
-        logger.info(f"Requesting historical data {request}")
-        success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
-
-
     # ------------ subscriptions -------------------
 
     def makeCorrelatorString(self, topic: Topic, service: str) -> str:
@@ -667,6 +661,20 @@ class Bbg(BbgServicer):
         clientid = self.makeClientID(context)
         topicstr = ",".join(request.topics)
         logger.info(f"Received historical data request {topicstr} from {clientid}")
+
+        if not request.HasField("start"):
+            start = protoTimestamp()
+            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=365))
+            request.start.CopyFrom(start)
+
+        if not request.HasField("end"):
+            end = protoTimestamp()
+            end.FromDatetime(dt.datetime.now())
+            request.end.CopyFrom(end)
+
+        if not request.fields:
+            request.fields.extend(["LAST_PRICE"])
+
         q = self.manager.Queue()
         messageList = []
         serquest = request.SerializeToString()
@@ -689,6 +697,20 @@ class Bbg(BbgServicer):
                                   context: grpc.aio.ServicerContext) -> IntradayBarResponse:
         clientid = self.makeClientID(context)
         logger.info(f"Received intraday bar request {str(request.topic)} from {clientid}")
+
+        if not request.HasField("start"):
+            start = protoTimestamp()
+            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=10))
+            request.start.CopyFrom(start)
+
+        if not request.HasField("end"):
+            end = protoTimestamp()
+            end.FromDatetime(dt.datetime.now())
+            request.end.CopyFrom(end)
+
+        if not request.interval:
+            request.interval = 5
+
         q = self.manager.Queue()
         messageList = []
         serquest = request.SerializeToString()

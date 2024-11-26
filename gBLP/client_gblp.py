@@ -222,10 +222,13 @@ class Bbg:
 
     def historicalDataRequest(self, 
                               topics, 
-                              fields = ["LAST_PRICE"], 
-                              start = dt.datetime.today() - dt.timedelta(days=365),
-                              end = dt.datetime.today(), 
+                              fields = None,
+                              start = None,
+                              end = None, 
                               options = None) -> bloomberg_pb2.HistoricalDataResponse:
+        if not type(topics) == list and all(isinstance(topic, str) for topic in topics):
+            logger.error("Topics must be a list of strings.")
+            return  
         return self.loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
 
     async def async_historicalDataRequest(self, 
@@ -234,16 +237,8 @@ class Bbg:
                                           start, 
                                           end, 
                                           options) -> bloomberg_pb2.HistoricalDataResponse:
-        sst = protoTimestamp()
-        sst.FromDatetime(start)
-        est = protoTimestamp()
-        est.FromDatetime(end)
-        hreq = bloomberg_pb2.HistoricalDataRequest(
-            topics=topics,
-            fields=fields,
-            start=sst,
-            end=est
-        )
+        args = {k: v for k, v in locals().items() if v is not None and k != "self"}
+        hreq = bloomberg_pb2.HistoricalDataRequest(**args)
         logger.info(f"Requesting historical data: {hreq}")
         data = await self.stub.historicalDataRequest(hreq, metadata=[("client", self.name)])
         return data
@@ -252,9 +247,9 @@ class Bbg:
 
     def intradayBarRequest(self, 
                            topic,
-                           start = dt.datetime.now() - dt.timedelta(days=3),
-                           end = dt.datetime.now(),
-                           interval = 1, 
+                           start = None, # defaults on server side
+                           end = None,  # defaults on server side
+                           interval = None, # defaults on server side
                            options = None) -> bloomberg_pb2.IntradayBarResponse:
         if not type(topic) == str:
             logger.error("Topic must be a string.")
@@ -267,16 +262,9 @@ class Bbg:
                                        end, 
                                        interval, 
                                        options) -> bloomberg_pb2.IntradayBarResponse:
-        sst = protoTimestamp()
-        sst.FromDatetime(start)
-        est = protoTimestamp()
-        est.FromDatetime(end)
-        bareq = bloomberg_pb2.IntradayBarRequest(
-            topic=topic,
-            start=sst,
-            end=est,
-            interval=interval
-        )
+        # filter out None args and self
+        args = {k: v for k, v in locals().items() if v is not None and k != "self"}
+        bareq = bloomberg_pb2.IntradayBarRequest(**args)
         logger.info(f"Requesting intraday bars: {bareq}")
         data = await self.stub.intradayBarRequest(bareq, metadata=[("client", self.name)])
         return data
@@ -462,11 +450,11 @@ if __name__ == "__main__":
 
         handler1 = HandlerStatusDot("blue")
         subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-        #bbg.sub(subs1)
+        bbg.sub(subs1)
 
         handler2 = Handler("red")
         subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
-        bbg.sub(subs2, handler = handler2)
+        #bbg.sub(subs2, handler = handler2)
 
         handler3 = Handler("blue")
         subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
@@ -511,39 +499,19 @@ if __name__ == "__main__":
 
         #---------------------------- request responses ----------------------------
 
-        data["hist"] = bbg.historicalDataRequest(
-            ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy"],
-            ["PX_LAST", "CUR_MKT_CAP"],
-            dt.datetime(2023, 11, 28),
-            dt.datetime(2024, 11, 30)
+        hist1 = bbg.historicalDataRequest(
+            topics = ["SPX Index", "GBPZAR Curncy"],
         )
 
-
-        data["ref"] = bbg.referenceDataRequest(topics = ["RNO FP Equity", "MSFT US Equity", "USDZAR Curncy", "WACKO Zillion", 
-                                                 "YCGT0018 Index"], 
-                                       fields = ["PX_LAST", "CUR_MKT_CAP", "INDX_MEMBERS", "NAME", "CURVE_MEMBERS"])
 
 
         # Request intraday bars
         intra = []
         for fx1 in fx:
             ii = bbg.intradayBarRequest(topic = fx1,
-                 start = dt.datetime.now() - dt.timedelta(days=4),
-                 end = dt.datetime.now(),
-                 interval = 1
             )
             intra.append(ii)
         data["intra"] = intra
-
-
-        # Request intraday bars
-        intra2 = bbg.intradayBarRequest(topic = "EURCZK Curncy",
-            start = dt.datetime.now() - dt.timedelta(days=4),
-            end = dt.datetime.now(),
-            interval = 1
-        )
-
-        data["intra2"] = intra2
 
         IPython.embed()
 
