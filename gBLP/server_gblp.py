@@ -44,7 +44,7 @@ import grpc; grpc.aio.init_grpc_aio()
 
 # python imports
 
-import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+import asyncio
 import string
 import random
 from collections import defaultdict
