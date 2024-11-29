@@ -177,6 +177,7 @@ class Bbg:
         logger.info("closing channel")
         self.loop.call_soon_threadsafe(self.channel.close())
         time.sleep(0.5)
+        self.done.set()
         logger.info("Thread joined. Exiting close.")
 
 
@@ -204,7 +205,7 @@ class Bbg:
                     f.write(iresponse.key)
                 with open(confdir / "ca_certificate.pem", "wb") as f:
                     f.write(iresponse.cacert)
-                logger.info("Certificates written.")
+                logger.info(f"Certificates written to {confdir}.")
             else:
                 logger.warning(f"Authorization denied for reason {iresponse.reason}")
 
@@ -447,6 +448,7 @@ if __name__ == "__main__":
     else:
         data = dict()
         bbg = Bbg()
+        IPython.embed()
 
         handler1 = HandlerStatusDot("blue")
         subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)

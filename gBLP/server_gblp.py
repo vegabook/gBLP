@@ -13,26 +13,39 @@ from rich.pretty import pprint
 from rich.logging import RichHandler
 import logging
 
-class CustomRichHandler(RichHandler):
-    def emit(self, record):
-        # Use the formatter to generate the full log string
-        log_entry = self.format(record)
-        if record.levelno == logging.ERROR:
-            # Print the entire formatted log entry in red
-            console.print(f"[bold red]{log_entry}[/bold red]")
-        elif record.levelno == logging.WARNING:
-            # Print the entire formatted log entry in yellow
-            console.print(f"[yellow2]{log_entry}[/yellow2]")
+from rich.logging import RichHandler
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(processName)s | %(funcName)s | %(message)s"
-)
-logger = logging.getLogger(__name__)  # Get the current module's logger
+# Set up the custom handler
+class CustomRichHandler(RichHandler):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+logger = logging.getLogger(__name__)  # Scoped to the current module
+logger.setLevel(logging.DEBUG)  # Set logging level
+
+if logger.hasHandlers():
+    logger.handlers.clear()
+
 custom_handler = CustomRichHandler()
-logger.addHandler(custom_handler)  # Add the custom handler
+formatter = logging.Formatter(
+    "%(asctime)s | %(levelname)s | %(name)s | %(processName)s | %(funcName)s | %(message)s"
+)
+custom_handler.setFormatter(formatter)
+logger.addHandler(custom_handler)
+
+# Example log
+logger.debug("This is a debug message")
+
+
+import os
+os.environ["GRPC_VERBOSITY"] = "DEBUG"
+os.environ["GRPC_TRACE"] = "secure_handshake,security"
+
+
+import grpc; grpc.aio.init_grpc_aio()
 
 # python imports
+
 import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import string
 import random
@@ -45,14 +58,15 @@ import queue
 import blpapi
 import msvcrt
 import traceback
-import os
 from pathlib import Path
 import multiprocessing # no more thread leaking from blpapi. Wrap and shut. 
 from multiprocessing import Manager
 from cryptography.hazmat.primitives import serialization, hashes 
 
 # gRPC imports
-import grpc
+import grpc; grpc.aio.init_grpc_aio() # logging
+from grpc.aio import ServerInterceptor
+
 from gBLP.bloomberg_pb2 import KeyRequestId, KeyResponse
 from gBLP.bloomberg_pb2 import HistoricalDataRequest 
 from gBLP.bloomberg_pb2 import HistoricalDataResponse
@@ -611,6 +625,15 @@ class SessionRunner(object):
             
 # ----------------- gRPC method implementations ----------------------
 
+
+
+class ConnectionLoggingInterceptor(ServerInterceptor):
+    async def intercept_service(self, continuation, handler_call_details):
+        console.print(f"[cyan]Incoming connection: {handler_call_details.method}")
+        # Proceed with the normal handling of the RPC
+        return await continuation(handler_call_details)
+
+
 def runSessionRunner(options, comq, done):
 
     async def start_session_runner():
@@ -836,7 +859,7 @@ def check_keypress():
 
 
 async def asyncMain(globalOptions):
-    bbgAioServer = grpc.aio.server()
+    bbgAioServer = grpc.aio.server(interceptors=(ConnectionLoggingInterceptor(),))
     keyAioServer = grpc.aio.server()
     manager = Manager()
     comq = manager.Queue() # communication queue
