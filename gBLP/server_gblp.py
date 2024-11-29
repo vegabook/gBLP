@@ -240,7 +240,7 @@ class Bbg(BbgServicer):
         logger.info(f"Received ping from {clientid}")
         timestamp = protoTimestamp()
         timestamp.GetCurrentTime()
-        message = request.message + " Pong"
+        breakpoint()
         pong = Pong(timestamp=timestamp, message=message)
         logger.info(f"Sending pong {pong} to {clientid}")
         return pong
