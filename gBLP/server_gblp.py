@@ -120,7 +120,7 @@ def serialize_datetime(obj):
 
 def parseCmdLine():
     """Parse command line arguments"""
-    parser=ArgumentParser(formatter_class=RawTextHelpFormatter,
+    parser=ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument(
         "--grpchost",
         dest="grpchost",
