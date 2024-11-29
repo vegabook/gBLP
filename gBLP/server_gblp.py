@@ -139,7 +139,6 @@ def parseCmdLine():
         action="store_true",
         default=False)
     options = parser.parse_args()
-    options.options.append(f"interval=1")
     return options
 
 
