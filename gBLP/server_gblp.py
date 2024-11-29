@@ -11,6 +11,7 @@ from rich.console import Console; console = Console()
 from rich.pretty import pprint
 from rich.logging import RichHandler
 import logging
+from multiprocessing import Manager
 
 from rich.logging import RichHandler
 
@@ -221,7 +222,7 @@ class Bbg(BbgServicer):
     # implements all the gRPC methods for the session manager
     # and communicates with the SessionRunner(s)
 
-    def __init__(self, options, comq, done, manager):
+    def __init__(self, options, done, manager):
         self.options = options
         self.done = done
 
