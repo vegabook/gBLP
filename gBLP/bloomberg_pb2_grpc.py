@@ -4,7 +4,6 @@ import grpc
 import warnings
 
 import gBLP.bloomberg_pb2 as bloomberg__pb2
-from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 GRPC_GENERATED_VERSION = '1.65.1'
 GRPC_VERSION = grpc.__version__
@@ -116,35 +115,10 @@ class BbgStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.sub = channel.unary_stream(
-                '/bloomberg.Bbg/sub',
-                request_serializer=bloomberg__pb2.TopicList.SerializeToString,
-                response_deserializer=bloomberg__pb2.Topic.FromString,
-                _registered_method=True)
-        self.unsub = channel.unary_unary(
-                '/bloomberg.Bbg/unsub',
-                request_serializer=bloomberg__pb2.TopicList.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                _registered_method=True)
-        self.subscriptionInfo = channel.unary_unary(
-                '/bloomberg.Bbg/subscriptionInfo',
-                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=bloomberg__pb2.TopicList.FromString,
-                _registered_method=True)
-        self.historicalDataRequest = channel.unary_unary(
-                '/bloomberg.Bbg/historicalDataRequest',
-                request_serializer=bloomberg__pb2.HistoricalDataRequest.SerializeToString,
-                response_deserializer=bloomberg__pb2.HistoricalDataResponse.FromString,
-                _registered_method=True)
-        self.intradayBarRequest = channel.unary_unary(
-                '/bloomberg.Bbg/intradayBarRequest',
-                request_serializer=bloomberg__pb2.IntradayBarRequest.SerializeToString,
-                response_deserializer=bloomberg__pb2.IntradayBarResponse.FromString,
-                _registered_method=True)
-        self.referenceDataRequest = channel.unary_unary(
-                '/bloomberg.Bbg/referenceDataRequest',
-                request_serializer=bloomberg__pb2.ReferenceDataRequest.SerializeToString,
-                response_deserializer=bloomberg__pb2.ReferenceDataResponse.FromString,
+        self.ping = channel.unary_unary(
+                '/bloomberg.Bbg/ping',
+                request_serializer=bloomberg__pb2.Ping.SerializeToString,
+                response_deserializer=bloomberg__pb2.Pong.FromString,
                 _registered_method=True)
 
 
@@ -152,38 +126,7 @@ class BbgServicer(object):
     """Bloomberg API session management
     """
 
-    def sub(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def unsub(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def subscriptionInfo(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def historicalDataRequest(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def intradayBarRequest(self, request, context):
-        """rpc intradayTickRequest. maybe "tick" or "gblpTick"
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def referenceDataRequest(self, request, context):
+    def ping(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -192,35 +135,10 @@ class BbgServicer(object):
 
 def add_BbgServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'sub': grpc.unary_stream_rpc_method_handler(
-                    servicer.sub,
-                    request_deserializer=bloomberg__pb2.TopicList.FromString,
-                    response_serializer=bloomberg__pb2.Topic.SerializeToString,
-            ),
-            'unsub': grpc.unary_unary_rpc_method_handler(
-                    servicer.unsub,
-                    request_deserializer=bloomberg__pb2.TopicList.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'subscriptionInfo': grpc.unary_unary_rpc_method_handler(
-                    servicer.subscriptionInfo,
-                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=bloomberg__pb2.TopicList.SerializeToString,
-            ),
-            'historicalDataRequest': grpc.unary_unary_rpc_method_handler(
-                    servicer.historicalDataRequest,
-                    request_deserializer=bloomberg__pb2.HistoricalDataRequest.FromString,
-                    response_serializer=bloomberg__pb2.HistoricalDataResponse.SerializeToString,
-            ),
-            'intradayBarRequest': grpc.unary_unary_rpc_method_handler(
-                    servicer.intradayBarRequest,
-                    request_deserializer=bloomberg__pb2.IntradayBarRequest.FromString,
-                    response_serializer=bloomberg__pb2.IntradayBarResponse.SerializeToString,
-            ),
-            'referenceDataRequest': grpc.unary_unary_rpc_method_handler(
-                    servicer.referenceDataRequest,
-                    request_deserializer=bloomberg__pb2.ReferenceDataRequest.FromString,
-                    response_serializer=bloomberg__pb2.ReferenceDataResponse.SerializeToString,
+            'ping': grpc.unary_unary_rpc_method_handler(
+                    servicer.ping,
+                    request_deserializer=bloomberg__pb2.Ping.FromString,
+                    response_serializer=bloomberg__pb2.Pong.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -235,34 +153,7 @@ class Bbg(object):
     """
 
     @staticmethod
-    def sub(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_stream(
-            request,
-            target,
-            '/bloomberg.Bbg/sub',
-            bloomberg__pb2.TopicList.SerializeToString,
-            bloomberg__pb2.Topic.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def unsub(request,
+    def ping(request,
             target,
             options=(),
             channel_credentials=None,
@@ -275,117 +166,9 @@ class Bbg(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/bloomberg.Bbg/unsub',
-            bloomberg__pb2.TopicList.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def subscriptionInfo(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/subscriptionInfo',
-            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            bloomberg__pb2.TopicList.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def historicalDataRequest(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/historicalDataRequest',
-            bloomberg__pb2.HistoricalDataRequest.SerializeToString,
-            bloomberg__pb2.HistoricalDataResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def intradayBarRequest(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/intradayBarRequest',
-            bloomberg__pb2.IntradayBarRequest.SerializeToString,
-            bloomberg__pb2.IntradayBarResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def referenceDataRequest(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bloomberg.Bbg/referenceDataRequest',
-            bloomberg__pb2.ReferenceDataRequest.SerializeToString,
-            bloomberg__pb2.ReferenceDataResponse.FromString,
+            '/bloomberg.Bbg/ping',
+            bloomberg__pb2.Ping.SerializeToString,
+            bloomberg__pb2.Pong.FromString,
             options,
             channel_credentials,
             insecure,
