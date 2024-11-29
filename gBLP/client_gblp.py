@@ -8,8 +8,8 @@
 import asyncio
 import threading
 import grpc
-import gBLP.bloomberg_pb2 as bloomberg_pb2
-import gBLP.bloomberg_pb2_grpc as bloomberg_pb2_grpc
+import bloomberg_pb2 as bloomberg_pb2
+import bloomberg_pb2_grpc as bloomberg_pb2_grpc
 import random
 from pathlib import Path
 import datetime as dt
@@ -17,9 +17,9 @@ import time
 import os
 import sys
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
-from gBLP.bloomberg_pb2 import Ping, Pong
-from gBLP.util.certMaker import get_conf_dir
-from gBLP.util.utils import makeName, printBeta
+from bloomberg_pb2 import Ping, Pong
+from util.certMaker import get_conf_dir
+from util.utils import makeName, printBeta
 import getpass
 import logging
 from collections import deque, defaultdict
@@ -29,7 +29,7 @@ from rich.console import Console; console = Console()
 from google.protobuf import empty_pb2
 import json
 
-from gBLP.constants import (
+from constants import (
     MAX_MESSAGE_LENGTH, 
     PONG_SECONDS_TIMEOUT,
     DEFAULT_FIELDS,
@@ -49,7 +49,6 @@ from gBLP.constants import (
 # * instrument search request
 
 
-ALL_FIELDS = allBbgFields.keys()
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -218,171 +217,17 @@ class Bbg:
 
 
 
-    def historicalDataRequest(self, 
-                              topics, 
-                              fields = None,
-                              start = None,
-                              end = None, 
-                              options = None) -> bloomberg_pb2.HistoricalDataResponse:
-        if not type(topics) == list and all(isinstance(topic, str) for topic in topics):
-            logger.error("Topics must be a list of strings.")
-            return  
-        return self.loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
-
-    async def async_historicalDataRequest(self, 
-                                          topics, 
-                                          fields, 
-                                          start, 
-                                          end, 
-                                          options) -> bloomberg_pb2.HistoricalDataResponse:
-        args = {k: v for k, v in locals().items() if v is not None and k != "self"}
-        hreq = bloomberg_pb2.HistoricalDataRequest(**args)
-        logger.info(f"Requesting historical data: {hreq}")
-        data = await self.stub.historicalDataRequest(hreq, metadata=[("client", self.name)])
-        return data
 
 
-
-    def intradayBarRequest(self, 
-                           topic,
-                           start = None, # defaults on server side
-                           end = None,  # defaults on server side
-                           interval = None, # defaults on server side
-                           options = None) -> bloomberg_pb2.IntradayBarResponse:
-        if not type(topic) == str:
-            logger.error("Topic must be a string.")
-            return
-        return self.loop_run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
-
-    async def async_intradayBarRequest(self, 
-                                       topic, 
-                                       start, 
-                                       end, 
-                                       interval, 
-                                       options) -> bloomberg_pb2.IntradayBarResponse:
-        # filter out None args and self
-        args = {k: v for k, v in locals().items() if v is not None and k != "self"}
-        bareq = bloomberg_pb2.IntradayBarRequest(**args)
-        logger.info(f"Requesting intraday bars: {bareq}")
-        data = await self.stub.intradayBarRequest(bareq, metadata=[("client", self.name)])
-        return data
-
-
-    def referenceDataRequest(self,
-                             topics,
-                             fields,
-                             overrides = None) -> bloomberg_pb2.ReferenceDataResponse:
-
-        if not type(topics) == list:
-            logger.error("Topics must be a list.")
-            return
-        if not type(fields) == list:
-            logger.error("Fields must be a list.")
-            return
-        return self.loop_run_async(self.async_referenceDataRequest(topics, fields, overrides))
-
-    async def async_referenceDataRequest(self,
-                                         topics,
-                                         fields,
-                                         overrides) -> bloomberg_pb2.ReferenceDataResponse:
-        refreq = bloomberg_pb2.ReferenceDataRequest(
-            topics=topics,
-            fields=fields,
-            overrides=overrides
-        )
-        logger.info(f"Requesting reference data: {refreq}")
-        data = await self.stub.referenceDataRequest(refreq, metadata=[("client", self.name)])
-        return data
-
-
-    def mtl(self, 
-            topics, 
-            fields=DEFAULT_FIELDS,
-            topictype=topicType.TICKER,
-            interval=2, 
-            bar=False) -> bloomberg_pb2.TopicList:
-        """Make a topic list."""
-        if not type(topics) == list:
-            logger.error("Topics must be a list.")
-            return
-        if not type(fields) == list:
-            logger.error("Fields must be a list.")
-            return
-        if bar:
-            subtype = subscriptionType.BAR
-        else:
-            subtype = subscriptionType.TICK
-        preptopics=[
-            bloomberg_pb2.Topic(
-                topic=topic,
-                fields=fields,
-                topictype=topictype,
-                interval=interval,
-                subtype=subtype
-            ) for topic in topics
-        ]
-        randomname = makeName(alphaLength=6, digitLength=3)
-        subtype = bloomberg_pb2.subscriptionType.BAR if bar else bloomberg_pb2.subscriptionType.TICK
-        return bloomberg_pb2.TopicList(tlid=randomname, topics=preptopics)
 
     def ping(self) -> bloomberg_pb2.Pong:
         return self.loop_run_async(self.async_ping())
 
     async def async_ping(self) -> bloomberg_pb2.Pong:
-        id = makeName(alphaLength=6, digitLength=3)
-        logger.info(f"Pinging server with id {id}")
-        ping = Ping(id=id)
+        message = makeName(alphaLength=6, digitLength=3)
+        logger.info(f"Pinging server with message {message}")
+        ping = Ping(message=message)
         pong = await self.stub.ping(ping, metadata=[("client", self.name)])
-
-
-    def sub(self, topics, handler=None):
-        """ synchronous subscribe method """
-        return self.loop_run_async(self.async_sub(topics, handler))
-
-
-    async def async_sub(self, topics, handler):
-        stream = self.stub.sub(topics, metadata=[("client", self.name)])
-        self.streams.append(stream)
-        self.loop_run_async_nowait(self.streamHandler(stream, handler))
-        logger.info("Subscription stream started.")
-        return topics 
-
-
-    async def streamHandler(self, stream, handler):
-        async for topic in stream:
-            try:
-                if topic.HasField("status"):
-                    self.statusdata.append(topic)
-                elif topic.HasField("barvals") or topic.HasField("fieldvals"):
-                    self.subsdata[topic.topic].append(topic)
-                if handler:
-                    asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
-                if self.done.is_set():
-                    break
-            except asyncio.CancelledError:
-                logger.info("streamHandler was cancelled.")
-                break
-            except Exception as e:
-                logger.error(f"Error in streamHandler: {e}")
-                break
-        logger.info("Exiting streamHandler.")
-
-
-    def unsub(self, topicList):
-        return self.loop_run_async(self.async_unsub(topicList))
-
-
-    async def async_unsub(self, topicList):
-        response = await self.stub.unsub(topicList, metadata=[("client", self.name)])
-        return response
-
-
-    def subscriptionInfo(self) -> bloomberg_pb2.TopicList:
-        return self.loop_run_async(self.async_subscriptionInfo())
-
-    async def async_subscriptionInfo(self):
-        response = await self.stub.subscriptionInfo(empty_pb2.Empty(), metadata=[("client", self.name)])
-        return response
 
 
 class Handler():
@@ -453,4 +298,10 @@ if __name__ == "__main__":
     if args.delcerts:
         delCerts()
     else:
+        bbg = Bbg()
+        while True:
+            print("Pinging...")
+            pong = bbg.ping()
+            print(f"received pong {pong}")
+            time.sleep(2)
 

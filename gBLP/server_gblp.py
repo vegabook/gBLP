@@ -235,7 +235,7 @@ class Bbg(BbgServicer):
         await self.session.close()
 
 
-    async def Ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
+    async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
         clientid = self.makeClientID(context)
         logger.info(f"Received ping from {clientid}")
         timestamp = google.protobuf.timestamp_pb2.Timestamp()
