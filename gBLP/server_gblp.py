@@ -242,6 +242,7 @@ class Bbg(BbgServicer):
         timestamp.GetCurrentTime()
         message = request.message + " Pong"
         pong = Pong(timestamp=timestamp, message=message)
+        logger.info(f"Sending pong {pong} to {clientid}")
         return pong
 
 # ----------------- mains ----------------------
