@@ -6,7 +6,6 @@
 # ---------------------------------------------------------------------------
 
 from gBLP.util.utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
-exitNotNT() # make sure we're on Windows otherwise exit. 
 
 from rich.console import Console; console = Console()
 from rich.pretty import pprint
