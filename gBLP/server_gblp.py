@@ -72,18 +72,6 @@ from google.protobuf import empty_pb2
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 
-from util.SubscriptionOptions import (
-    addSubscriptionOptions, 
-    setSubscriptionSessionOptions
-)
-
-from util.ConnectionAndAuthOptions import (
-    addConnectionAndAuthOptions, 
-    createSessionOptions
-)   
-
-from EventRouter import EventRouter
-
 from util.certMaker import get_conf_dir, make_client_certs, make_all_certs, check_for_certs
 from util.utils import makeName, printLicence, checkThreads
 
