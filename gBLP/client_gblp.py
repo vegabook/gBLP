@@ -9,10 +9,6 @@ import asyncio
 import threading
 import grpc
 import gBLP.bloomberg_pb2 as bloomberg_pb2
-from gBLP.bloomberg_pb2 import topicType
-from gBLP.bloomberg_pb2 import subscriptionType
-from gBLP.bloomberg_pb2 import allBbgFields
-from gBLP.bloomberg_pb2 import statusType
 import gBLP.bloomberg_pb2_grpc as bloomberg_pb2_grpc
 import random
 from pathlib import Path
@@ -21,6 +17,7 @@ import time
 import os
 import sys
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
+from gBLP.bloomberg_pb2 import Ping, Pong
 from gBLP.util.certMaker import get_conf_dir
 from gBLP.util.utils import makeName, printBeta
 import getpass
