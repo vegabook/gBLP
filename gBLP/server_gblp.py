@@ -222,7 +222,7 @@ class Bbg(BbgServicer):
     # implements all the gRPC methods for the session manager
     # and communicates with the SessionRunner(s)
 
-    def __init__(self, options, done, manager):
+    def __init__(self, options, comq, done, manager):
         self.options = options
         self.done = done
 
