@@ -61,7 +61,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 import grpc; grpc.aio.init_grpc_aio() # logging
 from grpc.aio import ServerInterceptor
 
-from bloomberg_pb2 import Ping, Pong
+from bloomberg_pb2 import Ping, Pong, KeyRequestId, KeyResponse
 
 from bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
 from bloomberg_pb2_grpc import add_BbgServicer_to_server, \
