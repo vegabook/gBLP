@@ -61,10 +61,10 @@ from cryptography.hazmat.primitives import serialization, hashes
 import grpc; grpc.aio.init_grpc_aio() # logging
 from grpc.aio import ServerInterceptor
 
-from gBLP.bloomberg_pb2 import Ping, Pong
+from bloomberg_pb2 import Ping, Pong
 
-from gBLP.bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
-from gBLP.bloomberg_pb2_grpc import add_BbgServicer_to_server, \
+from bloomberg_pb2_grpc import BbgServicer, KeyManagerServicer
+from bloomberg_pb2_grpc import add_BbgServicer_to_server, \
     add_KeyManagerServicer_to_server
 
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
@@ -72,20 +72,20 @@ from google.protobuf import empty_pb2
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 
-from gBLP.util.SubscriptionOptions import (
+from util.SubscriptionOptions import (
     addSubscriptionOptions, 
     setSubscriptionSessionOptions
 )
 
-from gBLP.util.ConnectionAndAuthOptions import (
+from util.ConnectionAndAuthOptions import (
     addConnectionAndAuthOptions, 
     createSessionOptions
 )   
 
-from gBLP.EventRouter import EventRouter
+from EventRouter import EventRouter
 
-from gBLP.util.certMaker import get_conf_dir, make_client_certs, make_all_certs, check_for_certs
-from gBLP.util.utils import makeName, printLicence, checkThreads
+from util.certMaker import get_conf_dir, make_client_certs, make_all_certs, check_for_certs
+from util.utils import makeName, printLicence, checkThreads
 
 
 # ----------------- global variables ----------------------
