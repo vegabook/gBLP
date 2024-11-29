@@ -325,6 +325,16 @@ class Bbg:
         subtype = bloomberg_pb2.subscriptionType.BAR if bar else bloomberg_pb2.subscriptionType.TICK
         return bloomberg_pb2.TopicList(tlid=randomname, topics=preptopics)
 
+    def ping(self) -> bloomberg_pb2.Pong:
+        return self.loop_run_async(self.async_ping())
+
+    async def async_ping(self) -> bloomberg_pb2.Pong:
+        id = makeName(alphaLength=6, digitLength=3)
+        logger.info(f"Pinging server with id {id}")
+        ping = Ping(id=id)
+        pong = await self.stub.ping(ping, metadata=[("client", self.name)])
+
+
     def sub(self, topics, handler=None):
         """ synchronous subscribe method """
         return self.loop_run_async(self.async_sub(topics, handler))
@@ -443,76 +453,4 @@ if __name__ == "__main__":
     if args.delcerts:
         delCerts()
     else:
-        data = dict()
-        bbg = Bbg()
-        IPython.embed()
-
-        handler1 = HandlerStatusDot("blue")
-        subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs1)
-
-        handler2 = Handler("red")
-        subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
-        #bbg.sub(subs2, handler = handler2)
-
-        handler3 = Handler("blue")
-        subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
-        #bbg.sub(subs3, handler = handler3)
-
-        fx = [
-            "EURUSD Curncy",
-            "USDJPY Curncy",
-            "GBPUSD Curncy",
-            "AUDUSD Curncy",
-            "USDCAD Curncy",
-            "USDCHF Curncy",
-            "NZDUSD Curncy",
-            "EURGBP Curncy",
-            "EURJPY Curncy",
-            "EURAUD Curncy",
-            "EURCAD Curncy",
-            "EURCHF Curncy",
-            "GBPJPY Curncy",
-            "GBPAUD Curncy",
-            "GBPCAD Curncy",
-            "GBPCHF Curncy",
-            "AUDJPY Curncy",
-            "AUDNZD Curncy",
-            "AUDCAD Curncy",
-            "AUDCHF Curncy",
-            "CADJPY Curncy",
-            "CADCHF Curncy",
-            "NZDJPY Curncy",
-            "NZDCAD Curncy",
-            "NZDCHF Curncy",
-            "USDSGD Curncy",
-            "USDHKD Curncy",
-            "USDCNY Curncy",
-            "EURNZD Curncy",
-            "EURSGD Curncy"
-        ]
-        handler4 = HandlerTime()
-        subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
-        #bbg.sub(subs4, handler = handler4)
-
-
-        #---------------------------- request responses ----------------------------
-
-        hist1 = bbg.historicalDataRequest(
-            topics = ["SPX Index", "GBPZAR Curncy"],
-        )
-
-
-
-        # Request intraday bars
-        intra = []
-        for fx1 in fx:
-            ii = bbg.intradayBarRequest(topic = fx1,
-            )
-            intra.append(ii)
-        data["intra"] = intra
-
-        IPython.embed()
-
-
 

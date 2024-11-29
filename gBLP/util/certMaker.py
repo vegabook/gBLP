@@ -204,7 +204,7 @@ def make_client_certs(hostname,
 
 
 def get_conf_dir():
-    return Path.home() / ".config/gBLP"
+    return Path.home() / ".config/gBLP_elixir_test"
 
 
 def check_for_certs(outdir = get_conf_dir()):
