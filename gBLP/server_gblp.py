@@ -158,10 +158,10 @@ class KeyManager(KeyManagerServicer):
                          request: KeyRequestId, 
                          context: grpc.aio.ServicerContext) -> KeyResponse:
         logging.info("Serving keyRequest request %s", request)
-        await asyncio.sleep(1)
         key, cert, cacert = make_client_certs(globalOptions.grpchost, get_conf_dir())
         bcacert = cacert.public_bytes(serialization.Encoding.PEM)
         logger.info(f"Key request granted for {request.id} and {context.peer()}")
+        await asyncio.sleep(1)
         return KeyResponse(key=key, cert=cert, cacert=bcacert, authorised=True)
 
 

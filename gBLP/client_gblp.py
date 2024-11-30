@@ -228,6 +228,7 @@ class Bbg:
         logger.info(f"Pinging server with message {message}")
         ping = Ping(message=message)
         pong = await self.stub.ping(ping, metadata=[("client", self.name)])
+        return pong
 
 
 class Handler():
@@ -302,6 +303,7 @@ if __name__ == "__main__":
         while True:
             print("Pinging...")
             pong = bbg.ping()
-            print(f"received pong {pong}")
-            time.sleep(2)
+            print("---------------------")
+            print(f"pong timestamp: {pong.timestamp} message: {pong.message}")
+            time.sleep(1)
 
