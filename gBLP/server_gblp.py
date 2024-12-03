@@ -5,7 +5,7 @@
 # you may not use this file except in compliance with the License.
 # ---------------------------------------------------------------------------
 
-from gBLP.util.utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
+from util.utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
 
 from rich.console import Console; console = Console()
 from rich.pretty import pprint
@@ -81,7 +81,7 @@ from util.utils import makeName, printLicence, checkThreads
 
 globalOptions = None
 
-from gBLP.constants import DEFAULT_FIELDS
+from constants import DEFAULT_FIELDS
 
 # ----------------- thread creation tracking ----------------------
 def trace_function(frame, event, arg):
