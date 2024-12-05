@@ -378,6 +378,16 @@ class Bbg:
         return response
 
 
+    def ping(self) -> bloomberg_pb2.Pong:
+        return self.loop_run_async(self.async_ping())
+
+    async def async_ping(self) -> bloomberg_pb2.Pong:
+        message = f"Name: {self.name}, Message: {makeName(10, 4)}"
+        logger.info(f"Pinging server with message: '{message}'")
+        response = await self.stub.ping(bloomberg_pb2.Ping(message=message), metadata=[("client", self.name)])
+        return response
+
+
 class Handler():
     """ Optional handler class to handle subscription responses. 
         This must be sent as a class and not as an instance, because it
@@ -448,19 +458,18 @@ if __name__ == "__main__":
     else:
         data = dict()
         bbg = Bbg()
-        IPython.embed()
 
         handler1 = HandlerStatusDot("blue")
         subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
         bbg.sub(subs1)
 
         handler2 = Handler("red")
-        subs2 = bbg.mtl(["SPX Index", "R2034 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
-        #bbg.sub(subs2, handler = handler2)
+        subs2 = bbg.mtl(["SPX Index", "R186 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
+        bbg.sub(subs2, handler = handler2)
 
         handler3 = Handler("blue")
         subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
-        #bbg.sub(subs3, handler = handler3)
+        bbg.sub(subs3, handler = handler3)
 
         fx = [
             "EURUSD Curncy",
@@ -497,6 +506,7 @@ if __name__ == "__main__":
         handler4 = HandlerTime()
         subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
         #bbg.sub(subs4, handler = handler4)
+        IPython.embed()
 
 
         #---------------------------- request responses ----------------------------

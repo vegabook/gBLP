@@ -146,6 +146,11 @@ class BbgStub(object):
                 request_serializer=bloomberg__pb2.ReferenceDataRequest.SerializeToString,
                 response_deserializer=bloomberg__pb2.ReferenceDataResponse.FromString,
                 _registered_method=True)
+        self.ping = channel.unary_unary(
+                '/bloomberg.Bbg/ping',
+                request_serializer=bloomberg__pb2.Ping.SerializeToString,
+                response_deserializer=bloomberg__pb2.Pong.FromString,
+                _registered_method=True)
 
 
 class BbgServicer(object):
@@ -189,6 +194,12 @@ class BbgServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ping(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_BbgServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -221,6 +232,11 @@ def add_BbgServicer_to_server(servicer, server):
                     servicer.referenceDataRequest,
                     request_deserializer=bloomberg__pb2.ReferenceDataRequest.FromString,
                     response_serializer=bloomberg__pb2.ReferenceDataResponse.SerializeToString,
+            ),
+            'ping': grpc.unary_unary_rpc_method_handler(
+                    servicer.ping,
+                    request_deserializer=bloomberg__pb2.Ping.FromString,
+                    response_serializer=bloomberg__pb2.Pong.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -386,6 +402,33 @@ class Bbg(object):
             '/bloomberg.Bbg/referenceDataRequest',
             bloomberg__pb2.ReferenceDataRequest.SerializeToString,
             bloomberg__pb2.ReferenceDataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ping(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bloomberg.Bbg/ping',
+            bloomberg__pb2.Ping.SerializeToString,
+            bloomberg__pb2.Pong.FromString,
             options,
             channel_credentials,
             insecure,

@@ -76,6 +76,7 @@ from gBLP.bloomberg_pb2 import ReferenceDataRequest
 from gBLP.bloomberg_pb2 import ReferenceDataResponse 
 from gBLP.bloomberg_pb2 import Topic
 from gBLP.bloomberg_pb2 import TopicList
+from gBLP.bloomberg_pb2 import Ping, Pong
 from gBLP.bloomberg_pb2 import topicType
 from gBLP.bloomberg_pb2 import subscriptionType
 
@@ -206,7 +207,7 @@ class KeyManager(KeyManagerServicer):
                          context: grpc.aio.ServicerContext) -> KeyResponse:
         logging.info("Serving keyRequest request %s", request)
         accept = await self.input_timeout((f"Received request from {context.peer()}"
-            f" with id {request.id}. Type Yes <Enter> within the next 10 seconds to authorise: "), 10)
+            f" with id {request.id}. \nType Yes <Enter> within the next 10 seconds to authorise: "), 10)
         if accept is None:
             return KeyResponse(authorised=False, reason="Server timed out")
         if accept == "Yes":
@@ -215,7 +216,7 @@ class KeyManager(KeyManagerServicer):
             logger.info(f"Key request granted for {request.id} and {context.peer()}")
             return KeyResponse(key=key, cert=cert, cacert=bcacert, authorised=True)
         else:
-            print("Yes not typed. Denying request.")
+            print(f"Got {accept} not Yes. Denying request.")
             return KeyResponse(authorised=False, reason="Request denied")
 
 
@@ -672,7 +673,9 @@ class Bbg(BbgServicer):
         self.done = done
 
     def makeClientID(self, context):
-        client = dict(context.invocation_metadata())["client"]
+        client = dict(context.invocation_metadata()).get("client")
+        if not client:
+            client = "unknown"
         ip = context.peer().split(":")[1]
         return f"{client}:{ip}"
 
@@ -816,6 +819,13 @@ class Bbg(BbgServicer):
         loop = asyncio.get_event_loop()
         tlist = await loop.run_in_executor(None, q.get)
         return TopicList.FromString(tlist)
+
+
+    async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
+        message = f"Pong: {request.message}"
+        logger.info(f"Received ping {request.message}. Sending pong.")
+        return Pong(message=message)
+
 
     async def close(self):
         self.comq.put(("key", b"q"))

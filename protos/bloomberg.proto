@@ -24,6 +24,7 @@ service Bbg {
   //rpc intradayTickRequest. maybe "tick" or "gblpTick"
   rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
   rpc referenceDataRequest(ReferenceDataRequest) returns (ReferenceDataResponse) {}
+  rpc ping(Ping) returns (Pong) {}
 }
 
 /////////////// Subscription /////////////////
@@ -247,6 +248,16 @@ message KeyResponse {
   string reason = 5;
 }
 
+
+/////////////// PingPong /////////////////
+
+message Ping {
+  string message = 1;
+}
+
+message Pong {
+  string message = 1;
+}
 
 ///////////// constants //////////////////
 
