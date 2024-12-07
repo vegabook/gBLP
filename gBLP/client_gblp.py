@@ -41,6 +41,7 @@ from gBLP.constants import (
 # TODO FIRST RELEASE
 # * subscription status does not contain the topic
 # * client open and close explicitly instead of on instantiation
+# * server correlators must show who is correlating
 # * write tests
 # * write examples
 # * write documentation

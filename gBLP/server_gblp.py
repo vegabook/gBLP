@@ -11,41 +11,16 @@ exitNotNT() # make sure we're on Windows otherwise exit.
 from rich.console import Console; console = Console()
 from rich.pretty import pprint
 from rich.logging import RichHandler
+
+
 import logging
-
-from rich.logging import RichHandler
-
-# Set up the custom handler
-class CustomRichHandler(RichHandler):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-logger = logging.getLogger(__name__)  # Scoped to the current module
-logger.setLevel(logging.DEBUG)  # Set logging level
-
-if logger.hasHandlers():
-    logger.handlers.clear()
-
-custom_handler = CustomRichHandler()
-formatter = logging.Formatter(
-    "%(asctime)s | %(levelname)s | %(name)s | %(processName)s | %(funcName)s | %(message)s"
-)
-custom_handler.setFormatter(formatter)
-logger.addHandler(custom_handler)
-
-# Example log
-logger.debug("This is a debug message")
-
-
-import os
-os.environ["GRPC_VERBOSITY"] = "DEBUG"
-os.environ["GRPC_TRACE"] = "secure_handshake,security"
-
+logger = logging.getLogger(__name__)  
+logger.setLevel(logging.DEBUG)  
 
 import grpc; grpc.aio.init_grpc_aio()
 
 # python imports
-
+import os
 import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import string
 import random
@@ -57,6 +32,7 @@ import signal
 import queue
 import blpapi
 import msvcrt
+import time
 import traceback
 from pathlib import Path
 import multiprocessing # no more thread leaking from blpapi. Wrap and shut. 
@@ -577,13 +553,13 @@ class SessionRunner(object):
         the session if the done event is set. """
         while not self.done.is_set():
             try:
-                msg = await asyncio.to_thread(self.comq.get, timeout=0.1)
+                msg = await asyncio.to_thread(self.comq.get, timeout=0.15)
                 # Process the message here
                 match msg:
                     case ("key", b"c"):
                         console.print(f"[bold cyan]Number of correlators: {len(self.correlators)}")
-                        for k in self.correlators.keys():
-                            console.print(f"[cyan]{k}")
+                        for k, v in self.correlators.items():
+                            console.print(f"[bold cyan]{k},  {v['clientid']=} ")
                     case ("key", b"t"):
                         checkThreads(processes=False, colour="green")
                     case ("key", b"i"): # DEBUG
@@ -650,10 +626,14 @@ def runSessionRunner(options, comq, done):
             await sessionRunner.close()
 
     # Set up and run the asyncio event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(start_session_runner())
+    except KeyboardInterrupt:
+        console.print("[bold red on white]SessionRunnner stopped by keyboard interrupt.")
+        done.set()
+        time.sleep(1)
     finally:
         loop.close()
 
@@ -726,7 +706,7 @@ class Bbg(BbgServicer):
 
         if not request.HasField("start"):
             start = protoTimestamp()
-            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=10))
+            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=140))
             request.start.CopyFrom(start)
 
         if not request.HasField("end"):
@@ -926,9 +906,10 @@ def main():
             logger.debug("asyncio main() exited")
         except KeyboardInterrupt:
             print("Keyboard interrupt")
-            console.print("[bold magenta on white]You should press <Enter> to stop the server.")
+            console.print("[bold magenta on white]You should press 'q' to stop the server.")
             console.print("[bold white on red] Killing all threads and processes.")
-            done.set()
+            if not done.is_set():
+                done.set()
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Caught exception {e}")

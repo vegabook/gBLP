@@ -13,7 +13,6 @@ from google.protobuf.struct_pb2 import Value
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 from gBLP.responseParsers import makeBarMessage, makeStatusMessage, makeTickMessage
 
-
 from rich.console import Console; console = Console() 
 
 
