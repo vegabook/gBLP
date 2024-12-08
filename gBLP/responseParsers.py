@@ -16,11 +16,12 @@ import datetime as dt
 import time
 import json
 import blpapi
+from loguru import logger
 
-import logging; logger = logging.getLogger(__name__)
 
 def getTimeStamp():
     return time.strftime("%Y-%m-%d %H:%M:%S")
+
 
 
 def makeBarMessage(msg, correlators):
@@ -111,26 +112,37 @@ def makeTickMessage(msg, correlators):
     # add the FieldVals to the topic
 
 
+def makeTopicString(topic):
+    fields = "|".join(topic.fields)
+    subtype = bbpb2.topicType.Name(topic.subtype)
+    topictype = bbpb2.topicType.Name(topic.topictype)
+    topicstr = f"{topic.topic=} {topictype=} {subtype=} {fields=} {topic.interval=} "
+    return topicstr
+
+
 def makeStatusMessage(msg, correlators):
     cid = msg.correlationId().value()
     timestampdt = dt.datetime.strptime(getTimeStamp(), '%Y-%m-%d %H:%M:%S')
     topic = bbpb2.Topic()
-    if cid in correlators:
-        topic.CopyFrom(correlators[cid]["topic"])
     # now erase from correlators if there was a subscription failure
     status = bbpb2.Status()
     status.statustype = bbpb2.statusType.Value(str(msg.messageType()))
     status.servertimestamp.FromDatetime(timestampdt)
     status.jsondetails = json.dumps(msg.toPy())
-    match topic.status.statustype:
-        case bbpb2.statusType.SubscriptionFailure:
-            del correlators[cid]
-        case bbpb2.statusType.SubscriptionTerminated:
-            del correlators[cid]
+    if cid in correlators:
+        topic.CopyFrom(correlators[cid]["topic"])
+        topicstr = makeTopicString(topic)
+        match topic.status.statustype:
+            case bbpb2.statusType.SubscriptionFailure:
+                del correlators[cid]
+            case bbpb2.statusType.SubscriptionTerminated:
+                del correlators[cid]
+    else:
+        topicstr = None 
     fieldVals = bbpb2.FieldVals()
     fieldVals.servertimestamp.FromDatetime(timestampdt)
     topic.status.CopyFrom(status)
-    return cid, topic
+    return cid, topic, topicstr
 
 
 def createValue(value):

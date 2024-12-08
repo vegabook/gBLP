@@ -4,14 +4,15 @@ import blpapi
 import datetime as dt
 import time
 import sys
-import logging; logger = logging.getLogger(__name__)
+from loguru import logger
 from gBLP.bloomberg_pb2 import Topic
 from gBLP.bloomberg_pb2 import FieldVal, FieldVals, Status
 from gBLP.bloomberg_pb2 import BarVals, barType
 from gBLP.bloomberg_pb2 import Status, statusType
 from google.protobuf.struct_pb2 import Value
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
-from gBLP.responseParsers import makeBarMessage, makeStatusMessage, makeTickMessage
+from gBLP.responseParsers import (makeBarMessage, makeStatusMessage, 
+    makeTickMessage, makeTopicString)
 
 from rich.console import Console; console = Console() 
 
@@ -43,27 +44,24 @@ class EventRouter(object):
             # now put message into correct asyncio queue. Ceremony here is because we're calling async from sync
             self.simplesend(cid, sendmsg)
             if not partial:   # then we're done with this so deleate the correlator entry
-                self.parent.correlators.pop(cid)
+                self.parent.correlators.pop(cid, None)
 
 
     def processSubscriptionStatus(self, event):
         for msg in event:
-            cid, topic = makeStatusMessage(msg, self.parent.correlators)
+            cid, topic, topicStr = makeStatusMessage(msg, self.parent.correlators)
             match topic.status.statustype:
                 case statusType.SubscriptionFailure:
-                    console.print(f"[bold red]{statusType.Name(topic.status.statustype)}[/bold red]", end = " ")
-                    logger.info(f"Received subscription failure status: {statusType.Name(topic.status.statustype)}")
+                    logger.warning(f"Received subscription failure status: {topicStr}")
                     self.simplesend(cid, ("status", topic.SerializeToString()))
-                    self.parent.correlators.pop(cid) # pop only after simplesend
+                    self.parent.correlators.pop(cid, None) # pop only after simplesend
                 case statusType.SubscriptionStarted:
-                    console.print(f"[bold green]{statusType.Name(topic.status.statustype)}[/bold green]", end = " ")
-                    logger.info(f"Received subscription started status: {statusType.Name(topic.status.statustype)}")
+                    logger.success(f"Subscription started: {topicStr}")
                     self.simplesend(cid, ("status", topic.SerializeToString()))
                 case statusType.SubscriptionTerminated:
-                    console.print(f"[bold gold3]{statusType.Name(topic.status.statustype)}[/bold gold3]", end = " ")
-                    logger.info(f"Received subscription terminated status: {statusType.Name(topic.status.statustype)}")
+                    logger.success(f"SubscriptionTerminated: {topicStr}")
                     self.simplesend(cid, ("status", topic.SerializeToString()))
-                    self.parent.correlators.pop(cid)
+                    self.parent.correlators.pop(cid, None)
                 case _:
                     self.simplesend(cid, ("status", topic.SerializeToString()))
 
@@ -71,18 +69,12 @@ class EventRouter(object):
     def processMiscEvents(self, event):
         timestampdt = dt.datetime.strptime(self.getTimeStamp(), '%Y-%m-%d %H:%M:%S')
         for msg in event:
-            cid, topic = makeStatusMessage(msg, self.parent.correlators)
+            cid, topic, topicStr = makeStatusMessage(msg, self.parent.correlators)
             statusstr = statusType.Name(topic.status.statustype)
             if statusstr ==statusType.Name(statusType.SessionTerminated):
-                console.print(f"[bold red]{statusstr}[/bold red]", end = " ")
-                logger.info(f"Received session termination status: {statusstr}")
-                # TODO clear correlators
-                # send messages to all connected clients on subscription
-                # TODO: send reconnection message to session
+                logger.warning(f"{statusstr}")
             else:
                 logger.info(f"Received miscellaneous status: {statusstr}")
-            console.print(f"[bold green]{statusstr}[/bold green]", end = " ")
-            logger.info(f"Received miscellaneous status: {statusstr}")
 
 
     def processSubscriptionDataEvent(self, event):

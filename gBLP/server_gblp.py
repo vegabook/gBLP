@@ -9,13 +9,8 @@ from gBLP.util.utils import makeName, printLicence, checkThreads, exitNotNT, pri
 exitNotNT() # make sure we're on Windows otherwise exit. 
 
 from rich.console import Console; console = Console()
-from rich.pretty import pprint
-from rich.logging import RichHandler
 
-
-import logging
-logger = logging.getLogger(__name__)  
-logger.setLevel(logging.DEBUG)  
+from loguru import logger
 
 import grpc; grpc.aio.init_grpc_aio()
 
@@ -63,7 +58,8 @@ from gBLP.bloomberg_pb2_grpc import add_BbgServicer_to_server, \
 from gBLP.responseParsers import (
     buildHistoricalDataResponse, 
     buildIntradayBarResponse,
-    buildReferenceDataResponse
+    buildReferenceDataResponse,
+    makeTopicString
 )
 
 from google.protobuf.struct_pb2 import Struct
@@ -155,6 +151,12 @@ def parseCmdLine():
         help="Delete all certificates",
         action="store_true",
         default=False)
+    parser.add_argument(
+        "--nokeypress",
+        dest="nokeypress",
+        help="Prevent the server from detecting status keypresses (only use if debugging with pdb)",
+        action="store_true",
+        default=False)
     options = parser.parse_args()
     options.options.append(f"interval=1")
     return options
@@ -181,7 +183,7 @@ class KeyManager(KeyManagerServicer):
     async def requestKey(self, 
                          request: KeyRequestId, 
                          context: grpc.aio.ServicerContext) -> KeyResponse:
-        logging.info("Serving keyRequest request %s", request)
+        logger.info("Serving keyRequest request %s", request)
         accept = await self.input_timeout((f"Received request from {context.peer()}"
             f" with id {request.id}. \nType Yes <Enter> within the next 10 seconds to authorise: "), 10)
         if accept is None:
@@ -221,10 +223,10 @@ async def serveBbgSession(bbgAioServer, bbgManager) -> None:
     bbgAioServer.add_secure_port(listenAddr, serverCredentials) 
 
     await bbgAioServer.start()
-    logging.info(f"Starting session server on {listenAddr}")
+    logger.info(f"Starting session server on {listenAddr}")
     await bbgAioServer.wait_for_termination()
     await bbgManager.close()
-    logging.info("Sessions server stopped.")
+    logger.info("gRPC sessions server stopped.")
     #raise # propagate
 
 
@@ -235,8 +237,9 @@ async def serveKeySession(keyAioServer) -> None:
     keyAioServer.add_insecure_port(keyListenAddr) # this listens without credentials
 
     await keyAioServer.start()
-    logging.info(f"Starting key server on {keyListenAddr}")
+    logger.info(f"Starting key server on {keyListenAddr}")
     await keyAioServer.wait_for_termination()
+    logger.info("Key server stopped.")
 
 
 
@@ -537,7 +540,7 @@ class SessionRunner(object):
                     logger.warning(f"Correlator not found for {substring}")
                 continue
             else:
-                logger.info(f"Unsubscribing {substring}")
+                logger.info(f"Unsubscribing: {makeTopicString(t)}")
                 substrings.append(substring)
                 correlid = correlator["correlid"]
                 bbgunsublist.add(substring, correlationId=correlid) 
@@ -858,25 +861,26 @@ async def asyncMain(globalOptions):
     bbgManager = Bbg(globalOptions, comq, done, manager)
     bbgTask = asyncio.create_task(serveBbgSession(bbgAioServer, bbgManager))
     keyTask = asyncio.create_task(serveKeySession(keyAioServer))
-    console.print("[bold blue]--------------------------")
-    console.print("[bold red on white blink]Press Q to stop the server")
-    console.print("[bold blue]--------------------------")
-    keypressTask =asyncio.create_task(keypressDetector(comq, done)) 
+    if not globalOptions.nokeypress:
+        keypressTask =asyncio.create_task(keypressDetector(comq, done)) 
+        console.print("[bold blue]--------------------------")
+        console.print("[bold red on white blink]Press Q to stop the server")
+        console.print("[bold blue]--------------------------")
     await asyncio.to_thread(done.wait)
-    logger.info("done waiting for. Stopping gRPC servers...")
+    logger.info("done event set")
     await bbgAioServer.stop(grace=3)
-    logger.info("gRPC server stopped.") 
     await keyAioServer.stop(grace=3)
-    logger.info("Key server stopped.")
     logger.info("Gathering asyncio gRPC task wrappers...")
-    await asyncio.gather(bbgTask, keyTask, keypressTask)
+    if not globalOptions.nokeypress:
+        await asyncio.gather(bbgTask, keyTask, keypressTask)
+    else:
+        await asyncio.gather(bbgTask, keyTask)
     logger.info("All tasks stopped. Exiting.")
     os._exit(0)
 
 
 def main():
     global globalOptions
-    logging.basicConfig(level=logging.DEBUG)
     globalOptions = parseCmdLine()
     if globalOptions.gencerts:
         if not globalOptions.grpchost:

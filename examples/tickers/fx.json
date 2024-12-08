@@ -1,0 +1,35 @@
+{
+  "fx": [
+    "EURUSD Curncy",
+    "USDJPY Curncy",
+    "GBPUSD Curncy",
+    "AUDUSD Curncy",
+    "USDCAD Curncy",
+    "USDCHF Curncy",
+    "NZDUSD Curncy",
+    "EURGBP Curncy",
+    "EURJPY Curncy",
+    "EURAUD Curncy",
+    "EURCAD Curncy",
+    "EURCHF Curncy",
+    "GBPJPY Curncy",
+    "GBPAUD Curncy",
+    "GBPCAD Curncy",
+    "GBPCHF Curncy",
+    "AUDJPY Curncy",
+    "AUDNZD Curncy",
+    "AUDCAD Curncy",
+    "AUDCHF Curncy",
+    "CADJPY Curncy",
+    "CADCHF Curncy",
+    "NZDJPY Curncy",
+    "NZDCAD Curncy",
+    "NZDCHF Curncy",
+    "USDSGD Curncy",
+    "USDHKD Curncy",
+    "USDCNY Curncy",
+    "EURNZD Curncy",
+    "EURSGD Curncy"
+  ]
+}
+

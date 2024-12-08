@@ -41,7 +41,7 @@
             python312Packages.psutil
             python312Packages.pytest
             python312Packages.poetry-core
-            python312Packages.twine
+            python312Packages.loguru
             poetry
             grpc-tools
             openssl_3_3

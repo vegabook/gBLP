@@ -9,4 +9,5 @@ pandas
 polars
 psutil
 pytest
+loguru
 

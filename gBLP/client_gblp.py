@@ -22,9 +22,9 @@ import os
 import sys
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 from gBLP.util.certMaker import get_conf_dir
-from gBLP.util.utils import makeName, printBeta
+from gBLP.util.utils import makeName, printBeta, printLicence
 import getpass
-import logging
+from loguru import logger
 from collections import deque, defaultdict
 import IPython
 from queue import Queue
@@ -39,13 +39,15 @@ from gBLP.constants import (
 )
 
 # TODO FIRST RELEASE
-# * subscription status does not contain the topic
 # * client open and close explicitly instead of on instantiation
 # * server correlators must show who is correlating
 # * write tests
 # * write examples
 # * write documentation
+# * overrides
+# * put colours into logger and upgrade to loguru
 # TODO FROLLOW UP RELEASE
+# * session reconnection with resubscription
 # * check UTC status (recall reference data request must have UTC TRUE specified)
 # * comq and process per client
 # * curve data request
@@ -62,14 +64,11 @@ parser.add_argument('--grpchost')
 parser.add_argument('--grpcport', default='50051')
 parser.add_argument('--grpckeyport', default='50052')
 parser.add_argument('--delcerts', action='store_true', default=False)
+parser.add_argument('--nobetawarn', action='store_true', default=False)
 args = parser.parse_args()
 username = getpass.getuser()
 
-import logging
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 
 def delCerts():
     """Delete certificates."""
@@ -87,20 +86,22 @@ class Bbg:
                  grpcport=args.grpcport,
                  grpckeyport=args.grpckeyport,
                  maxdDequeSize = 10000, 
-                 noBetaWarn = False):       # max size of deques each holding one topic
-
-        if not noBetaWarn:
+                 nobetawarn = args.nobetawarn):       # max size of deques each holding one topic
+        if not nobetawarn:
             printBeta()
+            printLicence()
         if not grpchost:
             raise ValueError("grpchost must be specified.")
         if not grpcport:
             raise ValueError("grpcport must be specified.")
         # setup grpc
-        self.name = makeName(alphaLength=6, digitLength=3)
+        if name:
+            self.name = name
+        else:
+            self.name = makeName(alphaLength=6, digitLength=3)
         self.grpchost = grpchost
         self.grpcport = grpcport
         self.grpckeyport = grpckeyport
-        self.done = asyncio.Event()
 
         # setup dictionaries for subscription data
         self.subsdata = defaultdict(lambda: deque(maxlen = maxdDequeSize)) # store subscription data
@@ -108,39 +109,61 @@ class Bbg:
 
         # Start the event loop in a separate thread
         self.loop = asyncio.new_event_loop()
-        self.thread = threading.Thread(target=self.start_loop, 
-                                       args=(self.loop,), 
+        self.thread = threading.Thread(target=self._start_loop_and_wait_done,
                                        daemon=False,
                                        name="grpc_thread")
         self.thread.start()
         # Run asynchronous initialization in the event loop
-        self.loop_run_async(self.connect())
+        #self._loop_run_async(self.connect())
         self.streams = []
+        self.closing = False
 
 
-    def start_loop(self, loop):
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self.done.wait())
-        logger.info("start_loop exiting after done.set()")
+    def _start_loop_and_wait_done(self):
+        asyncio.set_event_loop(self.loop) # start loop
+        self.done = asyncio.Event()
+        self.loop.run_until_complete(self._make_channel_and_stub()) # get the channel and caller stub
+        # wait for done event
+        print("Waiting for done event.")
+        self.loop.run_until_complete(self.done.wait())
+        self.loop.run_until_complete(self.channel.close())
+        # ----------------- clean up -----------------
+        while len(self.streams) > 0:
+            logger.info("Cancelling stream")
+            stream = self.streams.pop()
+            console.print(f"[bold gold3]pre: {stream.cancelled()}")
+            if not stream.cancelled():
+                stream.cancel()
+                time.sleep(0.2)
+                console.print(f"[bold magenta]post: {stream.cancelled()}")
+        logger.info("Goodbye.")
 
 
-    def loop_run_async(self, coro):
+    def close(self):
+        if not self.closing:
+            self.closing = True
+            self.loop.call_soon_threadsafe(self.done.set)
+
+        
+    def _loop_run_async(self, coro):
         """Schedules a coroutine to be run on the event loop."""
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
         return future.result()  # Waits until the coroutine is done and returns the result
 
-    def loop_run_async_nowait(self, coro):
+    
+    def _loop_run_async_nowait(self, coro):
         """Schedules a coroutine to be run on the event loop without waiting."""
         return asyncio.run_coroutine_threadsafe(coro, self.loop)
 
-    async def connect(self):
+
+    async def _make_channel_and_stub(self):
         """Connect to the gRPC server."""
         confdir = get_conf_dir()
         # Now look for keys, request them and write them if not found
         if not ((confdir / "client_certificate.pem").exists() and
                 (confdir / "client_private_key.pem").exists() and
                 (confdir / "ca_certificate.pem").exists()):
-            await self.makeCerts()
+            await self._makeCerts()
 
         # Load client certificate and private key
         with open(confdir / "client_certificate.pem", "rb") as f:
@@ -166,23 +189,8 @@ class Bbg:
             ])
         self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
 
-    def close(self):
-        while len(self.streams) > 0:
-            logger.info("Cancelling stream")
-            stream = self.streams.pop()
-            stream.cancel()
-            time.sleep(0.5)
-        logger.info("Setting done event")
-        self.loop.call_soon_threadsafe(self.done.set)
-        time.sleep(0.5)
-        logger.info("closing channel")
-        self.loop.call_soon_threadsafe(self.channel.close())
-        time.sleep(0.5)
-        self.done.set()
-        logger.info("Thread joined. Exiting close.")
 
-
-    async def makeCerts(self):
+    async def _makeCerts(self):
         """Make certificates if they do not exist."""
         confdir = get_conf_dir()
         ihostandport = f"{self.grpchost}:{self.grpckeyport}"
@@ -211,14 +219,12 @@ class Bbg:
                 logger.warning(f"Authorization denied for reason {iresponse.reason}")
 
 
-
-    def check_connection(self):
+    def check_connection_up(self):
         """Check the connection status."""
         state = self.channel.get_state()
-        if state == grpc.ChannelConnectivity.SHUTDOWN:
-            return False
-        else:
-            return False
+        return(state != grpc.ChannelConnectivity.SHUTDOWN \
+            and state != grpc.ChannelConnectivity.TRANSIENT_FAILURE)
+
 
 
 
@@ -231,7 +237,7 @@ class Bbg:
         if not type(topics) == list and all(isinstance(topic, str) for topic in topics):
             logger.error("Topics must be a list of strings.")
             return  
-        return self.loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
+        return self._loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
 
     async def async_historicalDataRequest(self, 
                                           topics, 
@@ -256,7 +262,7 @@ class Bbg:
         if not type(topic) == str:
             logger.error("Topic must be a string.")
             return
-        return self.loop_run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
+        return self._loop_run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
 
     async def async_intradayBarRequest(self, 
                                        topic, 
@@ -283,7 +289,7 @@ class Bbg:
         if not type(fields) == list:
             logger.error("Fields must be a list.")
             return
-        return self.loop_run_async(self.async_referenceDataRequest(topics, fields, overrides))
+        return self._loop_run_async(self.async_referenceDataRequest(topics, fields, overrides))
 
     async def async_referenceDataRequest(self,
                                          topics,
@@ -331,39 +337,37 @@ class Bbg:
 
     def sub(self, topics, handler=None):
         """ synchronous subscribe method """
-        return self.loop_run_async(self.async_sub(topics, handler))
+        return self._loop_run_async(self.async_sub(topics, handler))
 
 
     async def async_sub(self, topics, handler):
         stream = self.stub.sub(topics, metadata=[("client", self.name)])
         self.streams.append(stream)
-        self.loop_run_async_nowait(self.streamHandler(stream, handler))
+        self._loop_run_async_nowait(self.streamHandler(stream, handler))
         logger.info("Subscription stream started.")
         return topics 
 
-
     async def streamHandler(self, stream, handler):
-        async for topic in stream:
+        while True:
             try:
-                if topic.HasField("status"):
-                    self.statusdata.append(topic)
-                elif topic.HasField("barvals") or topic.HasField("fieldvals"):
-                    self.subsdata[topic.topic].append(topic)
-                if handler:
-                    asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
-                if self.done.is_set():
-                    break
-            except asyncio.CancelledError:
-                logger.info("streamHandler was cancelled.")
-                break
+                async for topic in stream:
+                    if topic.HasField("status"):
+                        self.statusdata.append(topic)
+                    elif topic.HasField("barvals") or topic.HasField("fieldvals"):
+                        self.subsdata[topic.topic].append(topic)
+                    if handler:
+                        asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
             except Exception as e:
-                logger.error(f"Error in streamHandler: {e}")
+                if not self.closing:
+                    self.close()
+                break
+            if self.done.is_set():
                 break
         logger.info("Exiting streamHandler.")
 
 
     def unsub(self, topicList):
-        return self.loop_run_async(self.async_unsub(topicList))
+        return self._loop_run_async(self.async_unsub(topicList))
 
 
     async def async_unsub(self, topicList):
@@ -372,7 +376,7 @@ class Bbg:
 
 
     def subscriptionInfo(self) -> bloomberg_pb2.TopicList:
-        return self.loop_run_async(self.async_subscriptionInfo())
+        return self._loop_run_async(self.async_subscriptionInfo())
 
     async def async_subscriptionInfo(self):
         response = await self.stub.subscriptionInfo(empty_pb2.Empty(), metadata=[("client", self.name)])
@@ -380,7 +384,7 @@ class Bbg:
 
 
     def ping(self) -> bloomberg_pb2.Pong:
-        return self.loop_run_async(self.async_ping())
+        return self._loop_run_async(self.async_ping())
 
     async def async_ping(self) -> bloomberg_pb2.Pong:
         message = f"Name: {self.name}, Message: {makeName(10, 4)}"
@@ -431,6 +435,7 @@ class HandlerStatusDot():
         except Exception as e:
             print(f"Error in handler: {e}")
 
+
 class HandlerTime():
     async def handle(self, response):
         if response.HasField("fieldvals"):
@@ -460,71 +465,10 @@ if __name__ == "__main__":
         data = dict()
         bbg = Bbg()
 
-        handler1 = HandlerStatusDot("blue")
-        subs1 = bbg.mtl(["XBTUSD Curncy", "XETUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
+        subs1 = bbg.mtl(["XBTUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
         bbg.sub(subs1)
-
-        handler2 = Handler("red")
-        subs2 = bbg.mtl(["SPX Index", "R186 Govt"], DEFAULT_FIELDS, bar=True, interval = 1)
-        bbg.sub(subs2, handler = handler2)
-
-        handler3 = Handler("blue")
-        subs3 = bbg.mtl(["TSLA US Equity", "NVDA US Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs3, handler = handler3)
-
-        fx = [
-            "EURUSD Curncy",
-            "USDJPY Curncy",
-            "GBPUSD Curncy",
-            "AUDUSD Curncy",
-            "USDCAD Curncy",
-            "USDCHF Curncy",
-            "NZDUSD Curncy",
-            "EURGBP Curncy",
-            "EURJPY Curncy",
-            "EURAUD Curncy",
-            "EURCAD Curncy",
-            "EURCHF Curncy",
-            "GBPJPY Curncy",
-            "GBPAUD Curncy",
-            "GBPCAD Curncy",
-            "GBPCHF Curncy",
-            "AUDJPY Curncy",
-            "AUDNZD Curncy",
-            "AUDCAD Curncy",
-            "AUDCHF Curncy",
-            "CADJPY Curncy",
-            "CADCHF Curncy",
-            "NZDJPY Curncy",
-            "NZDCAD Curncy",
-            "NZDCHF Curncy",
-            "USDSGD Curncy",
-            "USDHKD Curncy",
-            "USDCNY Curncy",
-            "EURNZD Curncy",
-            "EURSGD Curncy"
-        ]
-        handler4 = HandlerTime()
-        subs4 = bbg.mtl(fx, DEFAULT_FIELDS, bar=False, interval = 1)
-        #bbg.sub(subs4, handler = handler4)
-        IPython.embed()
-
-
-        #---------------------------- request responses ----------------------------
-
-        hist1 = bbg.historicalDataRequest(
-            topics = ["SPX Index", "GBPZAR Curncy"],
-        )
-
-
-
-        # Request intraday bars
-        intra = []
-        for fx1 in fx:
-            ii = bbg.intradayBarRequest(topic = fx1,
-            )
-            intra.append(ii)
-        data["intra"] = intra
+        subs2 = bbg.mtl(["XETUSD Curncy"], DEFAULT_FIELDS, bar=True, interval = 1)
+        bbg.sub(subs2)
 
         IPython.embed()
 
