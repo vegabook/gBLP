@@ -347,22 +347,45 @@ class Bbg:
         logger.info("Subscription stream started.")
         return topics 
 
+
     async def streamHandler(self, stream, handler):
+
+        async def streamConsumer(cstream, cqueue):
+            try:
+                async for ctopic in cstream:
+                    await cqueue.put(("topic", ctopic))
+            except Exception as e:
+                console.print(f"[bold red]Error in streamConsumer: {e}")
+                await cqueue.put(("error", e))
+
+        queue = asyncio.Queue()
+        consumertask = asyncio.create_task(streamConsumer(stream, queue))
+
         while True:
             try:
-                async for topic in stream:
-                    if topic.HasField("status"):
-                        self.statusdata.append(topic)
-                    elif topic.HasField("barvals") or topic.HasField("fieldvals"):
-                        self.subsdata[topic.topic].append(topic)
-                    if handler:
-                        asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
+                if not queue.empty():
+                    message = queue.get_nowait()
+                    if message[0] == "topic":
+                        topic = message[1]
+                        if topic.HasField("status"):
+                            console.print(f"[magenta]{topic}[/magenta]")
+                            self.statusdata.append(topic)
+                        elif topic.HasField("barvals") or topic.HasField("fieldvals"):
+                            self.subsdata[topic.topic].append(topic)
+                        if handler:
+                            asyncio.run_coroutine_threadsafe(handler.handle(topic), self.loop)
+                    elif message[0] == "error":
+                        console.print(f"[bold chartreuse]Received error from streamConsumer: {message[1]}")
+                        self.close() # shutdown everyting on one error. TODO review this
+                else:
+                    await asyncio.sleep(0.05)
             except Exception as e:
-                if not self.closing:
-                    self.close()
+                console.print(f"[chartreuse]Error in streamHandler: {e}")
+                self.close() # shutdown everyting on one error. TODO review this
+            if self.done.is_set():    # this will hav ebeen set by self.close
                 break
-            if self.done.is_set():
-                break
+        logger.info("Cancelling streamHandler consumer.")
+        consumertask.cancel()
         logger.info("Exiting streamHandler.")
 
 
@@ -469,6 +492,14 @@ if __name__ == "__main__":
         bbg.sub(subs1)
         subs2 = bbg.mtl(["XETUSD Curncy"], DEFAULT_FIELDS, bar=True, interval = 1)
         bbg.sub(subs2)
+        subs3 = bbg.mtl(["USDZAR Curncy"], DEFAULT_FIELDS, bar=True, interval = 1)
+        bbg.sub(subs3)
+        subs4 = bbg.mtl(["NVDA US Equity"], DEFAULT_FIELDS, bar=True, interval = 1)
+        bbg.sub(subs4)
+        subs5 = bbg.mtl(["RNO FP Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
+        bbg.sub(subs5)
+        subs6 = bbg.mtl(["ILS Curncy"], DEFAULT_FIELDS, bar=True, interval = 1)
+        bbg.sub(subs6)
 
         IPython.embed()
 
