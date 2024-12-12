@@ -7,8 +7,10 @@ from rich.box import SQUARE
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 import logging; logger = logging.getLogger(__name__)
 import os
+import requests
+import platform
 
-def makeName(alphaLength, digitLength):
+def makeName(alphaLength, digitLength, alsoUserDetails = False):
     """Make a dummy name if none provided."""
     consonants = "bcdfghjklmnpqrstvwxyz"
     vowels = "aeiou"
@@ -16,6 +18,8 @@ def makeName(alphaLength, digitLength):
     word = ''.join(random.choice(consonants if i % 2 == 0 else vowels) 
                 for i in range(alphaLength)) + \
                    ''.join(random.choice(digits) for i in range(digitLength))
+    if alsoUserDetails:
+        word += "|" + getUserName() + "|" + getPlatform() + "|" + getExternalIP()
     return word
 
 
@@ -62,4 +66,41 @@ def exitNotNT():
     if os.name != "nt":
         console.print("gBLP server runs on Windows only.")
         exit(1)
+
+def getExternalIP():
+    try:
+        ip = requests.get("https://api.ipify.org").text
+        return ip
+    except Exception as e:
+        logger.error(f"Error getting external IP: {e}")
+        return "failIP"
+
+def getUserName():
+    try: 
+        return os.getlogin()
+    except Exception as e:
+        logger.error(f"Error getting username: {e}")
+        return "failUserName"
+
+def getPlatform():
+    try:
+        return platform.platform()
+    except Exception as e:
+        logger.error(f"Error getting platform: {e}")
+        return "failPlatform"
+
+
+if __name__ == "__main__":
+    printLicence()
+    printBeta()
+    print(makeName(5, 5, True))
+    print(getExternalIP())
+    print(getUserName())
+    print(getPlatform())
+    checkThreads()
+    checkThreads()
+    checkThreads("green")
+    print("Done")
+    exit(0)
+
 

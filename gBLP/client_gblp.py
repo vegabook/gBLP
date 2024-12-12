@@ -59,12 +59,18 @@ ALL_FIELDS = allBbgFields.keys()
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--message', default='hello!')
-parser.add_argument('--grpchost')
-parser.add_argument('--grpcport', default='50051')
-parser.add_argument('--grpckeyport', default='50052')
-parser.add_argument('--delcerts', action='store_true', default=False)
-parser.add_argument('--nobetawarn', action='store_true', default=False)
+parser.add_argument("--grpchost", 
+    help="Host for data and key requests.")
+parser.add_argument("--grpcport", default="50051", 
+    help="Port for data requests.")
+parser.add_argument("--grpckeyport", default="50052", 
+    help="Port for key requests.")
+parser.add_argument("--delcerts", action="store_true", default=False, 
+    help="Delete certificates.")
+parser.add_argument("--nobetawarn", action="store_true", default=False, 
+    help="Do not show beta warning.")
+parser.add_argument("--nodetails", action="store_true", default=False, 
+    help="Do not use IP address, username, or operating system type in the client id string.")
 args = parser.parse_args()
 username = getpass.getuser()
 
