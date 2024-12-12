@@ -104,7 +104,8 @@ class Bbg:
         if name:
             self.name = name
         else:
-            self.name = makeName(alphaLength=6, digitLength=3)
+            self.name = makeName(alphaLength=6, digitLength=3, 
+                                 alsoUserDetails = not args.nodetails)
         self.grpchost = grpchost
         self.grpcport = grpcport
         self.grpckeyport = grpckeyport
