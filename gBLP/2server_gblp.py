@@ -245,7 +245,7 @@ async def serveKeySession(keyAioServer) -> None:
 
 # -------------------- individual session handler ----------------------
 
-class SessionRunner(BbgServicer):
+class SessionServicer(BbgServicer):
     def __init__(self, options, comq, done):
         self.options = options
         self.comq = comq 
@@ -338,8 +338,11 @@ class SessionRunner(BbgServicer):
         logger.info(f"Bloomberg session closed")
 
 
+
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
+
+        # hhhh historical data request prep
         clientid = self.makeClientID(context)
         topicstr = ",".join(request.topics)
         logger.info(f"Received historical data request {topicstr} from {clientid}")
@@ -358,8 +361,9 @@ class SessionRunner(BbgServicer):
             request.fields.extend(["LAST_PRICE"])
 
         q = self.manager.Queue()
+        
+        # hhhh historical data request send to bbg
 
-        """ request historical data """
         logger.info(f"Requesting historical data {request}")
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
@@ -379,6 +383,21 @@ class SessionRunner(BbgServicer):
                                        "request": request, 
                                        "clientid": clientid}
         self.session.sendRequest(bbgRequest, correlationId=correlid)
+
+        # hhhh historical data request responde 
+        messageList = []
+        while True:
+            # get from multprocessing queue from async
+            msg = await self.loop.run_in_executor(None, q.get)
+            messageList.append(msg[1]["data"])
+            if not msg[1]["partial"]:
+                break
+        if messageList:    
+            result = buildHistoricalDataResponse(messageList)
+            return result 
+        else:
+            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+
 
 
     async def intradayBarRequest(self, request: IntradayBarRequest, 
@@ -626,6 +645,7 @@ class SessionRunner(BbgServicer):
 
 
 class ConnectionLoggingInterceptor(ServerInterceptor):
+    """ DEBUG connections to server"""
     async def intercept_service(self, continuation, handler_call_details):
         console.print(f"[cyan]Incoming connection: {handler_call_details.method}")
         # Proceed with the normal handling of the RPC
@@ -633,11 +653,18 @@ class ConnectionLoggingInterceptor(ServerInterceptor):
 
 
 def runSessionRunner(options, comq, done):
+    """ now we're already in a new process """
 
     async def start_session_runner():
         logger.info("Starting session runner")
-        sessionRunner = SessionRunner(options, comq, done)
-        sessionRunner.open()
+
+        # TODO HERE IS WHERE YOU WILL PUT THE SESSION GRPC SERVER
+        sessionAioServer = grpc.aio.server()
+        sessionServicer = SessionServicer(options, comq, done) # this is the nested gRPC server
+        sessionServicer.open()
+        add_BbgServicer_to_server(sessionServicer, sessionAioServer)
+        sessionAioServer.add_insecure_port('unix:////./pipe/my_named_pipe')
+        sessionAioServer.start()
         try:
             # Keep the event loop running
             await asyncio.Future()  # Run until cancelled
@@ -646,9 +673,9 @@ def runSessionRunner(options, comq, done):
         finally:
             await sessionRunner.close()
 
-    # Set up and run the asyncio event loop
+    # Set up and run the asyncio event loop that the SessionServicer will run in
     try:
-        loop = asyncio.new_event_loop()
+        loop = asyncio.new_event_loop() # the 
         asyncio.set_event_loop(loop)
         loop.run_until_complete(start_session_runner())
     except KeyboardInterrupt:
@@ -672,34 +699,17 @@ class Bbg(BbgServicer):
         self.manager = manager
         self.comq = comq
         self.done = done
+        # TODO we will need a stub here!!
 
     def makeClientID(self, context):
         client = dict(context.invocation_metadata()).get("client")
-        if not client:
-            client = "unknown"
-        ip = context.peer().split(":")[1]
-        return f"{client}:{ip}"
+        return client
 
     async def closeSession(self):
         await self.session.close()
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
-        messageList = []
-        serquest = request.SerializeToString()
-        self.comq.put(("request", "historicalDataRequest", (serquest, q, clientid)))
-        loop = asyncio.get_event_loop()
-        while True:
-            # get from multprocessing queue from async
-            msg = await loop.run_in_executor(None, q.get)
-            messageList.append(msg[1]["data"])
-            if not msg[1]["partial"]:
-                break
-        if messageList:    
-            result = buildHistoricalDataResponse(messageList)
-            return result 
-        else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
     async def intradayBarRequest(self, request: IntradayBarRequest,

@@ -9,10 +9,6 @@ import asyncio
 import threading
 import grpc
 import gBLP.bloomberg_pb2 as bloomberg_pb2
-from gBLP.bloomberg_pb2 import topicType
-from gBLP.bloomberg_pb2 import subscriptionType
-from gBLP.bloomberg_pb2 import allBbgFields
-from gBLP.bloomberg_pb2 import statusType
 import gBLP.bloomberg_pb2_grpc as bloomberg_pb2_grpc
 import random
 from pathlib import Path
@@ -55,7 +51,7 @@ from gBLP.constants import (
 # * instrument search request
 
 
-ALL_FIELDS = allBbgFields.keys()
+ALL_FIELDS = bloomberg_pb2.allBbgFields.keys()
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -315,7 +311,7 @@ class Bbg:
     def mtl(self, 
             topics, 
             fields=DEFAULT_FIELDS,
-            topictype=topicType.TICKER,
+            topictype=bloomberg_pb2.topicType.TICKER,
             interval=2, 
             bar=False) -> bloomberg_pb2.TopicList:
         """Make a topic list."""
@@ -326,9 +322,9 @@ class Bbg:
             logger.error("Fields must be a list.")
             return
         if bar:
-            subtype = subscriptionType.BAR
+            subtype = bloomberg_pb2.subscriptionType.BAR
         else:
-            subtype = subscriptionType.TICK
+            subtype = bloomberg_pb2.subscriptionType.TICK
         preptopics=[
             bloomberg_pb2.Topic(
                 topic=topic,
