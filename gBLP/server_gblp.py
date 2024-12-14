@@ -348,16 +348,15 @@ class SessionRunner(BbgServicer):
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
 
+        # validate and complete
         if not request.HasField("start"):
             start = protoTimestamp()
             start.FromDatetime(dt.datetime.now() - dt.timedelta(days=365))
             request.start.CopyFrom(start)
-
         if not request.HasField("end"):
             end = protoTimestamp()
             end.FromDatetime(dt.datetime.now())
             request.end.CopyFrom(end)
-
         if not request.fields:
             request.fields.extend(["LAST_PRICE"])
 
@@ -397,15 +396,27 @@ class SessionRunner(BbgServicer):
             context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
-    async def intradayBarRequest(self, request: IntradayBarRequest, 
-                                 q: multiprocessing.Queue,
-                                 clientid: string) -> IntradayBarResponse:
+
+    async def intradayBarRequest(self, request: IntradayBarRequest,
+                                 context: grpc.aio.ServicerContext) -> IntradayBarResponse:
         """ request intraday bar data """
+
+        # validate and complete
+        if not request.HasField("start"):
+            start = protoTimestamp()
+            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=140))
+            request.start.CopyFrom(start)
+        if not request.HasField("end"):
+            end = protoTimestamp()
+            end.FromDatetime(dt.datetime.now())
+            request.end.CopyFrom(end)
+        if not request.interval:
+            request.interval = 5
+
+        # send request to bloomberg 
         logger.info(f"Requesting intraday bar data {str(request.topic)}")
         success, bbgRequest = self._createEmptyRequest("IntradayBarRequest")
         if not success:
-
-
             return []
         dtstart = request.start.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
         dtend = request.end.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
@@ -417,19 +428,34 @@ class SessionRunner(BbgServicer):
                        "interval": request.interval} # TODO OVERRIDES
         bbgRequest.fromPy(requestDict)
         # create a random 32-character string as the correlationId
-        corrString = f"bar:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"
+        corrString = f"bar:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
         # queue for this request, with correlator so event handler can match it
+        q = asyncio.Queue() 
         self.correlators[corrString] = {"q": q,
-                                       "request": request, 
-                                       "clientid": clientid}
+                                       "request": request}
         self.session.sendRequest(bbgRequest, correlationId=correlid)
+
+        # wait for response
+        messageList = []
+        while True:
+            msg = await q.get()
+            messageList.append(msg["data"])
+            if not msg["partial"]: 
+                break # last message received
+        if messageList:
+            result = buildIntradayBarResponse(messageList)
+            return result
+        else:
+            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+
 
 
     async def referenceDataRequest(self, request: ReferenceDataRequest,
-                                   q: multiprocessing.Queue,
-                                   clientid: string) -> ReferenceDataResponse:
+                                   context: grpc.aio.ServicerContext) -> ReferenceDataResponse:
         """ request reference data """
+
+        # send request to bloomberg
         logger.info(f"Requesting reference data {request}")
         success, bbgRequest = self._createEmptyRequest("ReferenceDataRequest")
         if not success:
@@ -440,12 +466,24 @@ class SessionRunner(BbgServicer):
         if request.overrides:
             requestDict["overrides"] = request.overrides
         bbgRequest.fromPy(requestDict)
-        corrString = f"ref:{clientid}:{makeName(alphaLength = 32, digitLength = 0)}"
+        corrString = f"ref:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
+        q = asyncio.Queue() 
         self.correlators[corrString] = {"q": q,
-                                       "request": request, 
-                                       "clientid": clientid}
+                                       "request": request}
         self.session.sendRequest(bbgRequest, correlationId=correlid)
+
+        messageList = []
+        while True:
+            msg = await q.get()
+            messageList.append(msg["data"])
+            if not msg["partial"]:
+                break
+        if messageList:
+            result = buildReferenceDataResponse(messageList)
+            return result
+        else:
+            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
     # -------------- DEBUG ---------------
@@ -553,13 +591,14 @@ class SessionRunner(BbgServicer):
 
 
 
-    async def subscriptionInfo(self, clientid, q) -> TopicList:
+    async def subscriptionInfo(self, _request, 
+                               context: grpc.aio.ServicerContext) -> TopicList:
         """ get the current subscription list """
         tl = TopicList()
         for v in self.correlators.values():
             if v["clientid"] == clientid:
                 tl.topics.append(v["topic"])
-        q.put(tl.SerializeToString())
+        return tl
 
 
     async def unsub(self, topicList: TopicList, context: grpc.aio.ServicerContext) -> empty_pb2.Empty:
@@ -611,17 +650,6 @@ class SessionRunner(BbgServicer):
                         checkThreads(processes=False, colour="green")
                     case ("key", b"i"): # DEBUG
                         await self.serviceInfo()
-                    case ("request", "intradayBarRequest", (serquest, q, clientid)):
-                        request = IntradayBarRequest.FromString(serquest)
-                        await self.intradayBarRequest(request, q, clientid)
-                    case ("request", "referenceDataRequest", (serquest, q, clientid)):
-                        request = ReferenceDataRequest.FromString(serquest)
-                        await self.referenceDataRequest(request, q, clientid)
-                    case ("request", "sub", (serquest, subq, clientid)):
-                        topicList = TopicList.FromString(serquest)
-                        await self.sub(topicList, subq, clientid)
-                    case ("request", "subscriptionInfo", (clientid, q)):
-                        tlist = await self.subscriptionInfo(clientid, q)
                     case ("request", "close"):
                         self.done.set()
             except queue.Empty:
@@ -720,61 +748,21 @@ class Bbg(BbgServicer):
         return result
 
 
-
     async def intradayBarRequest(self, request: IntradayBarRequest,
                                   context: grpc.aio.ServicerContext) -> IntradayBarResponse:
         clientid = self._makeClientId(context)
         logger.info(f"Received intraday bar request {str(request.topic)} from {clientid}")
+        result = await self.stub.intradayBarRequest(request)
+        return result
 
-        if not request.HasField("start"):
-            start = protoTimestamp()
-            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=140))
-            request.start.CopyFrom(start)
-
-        if not request.HasField("end"):
-            end = protoTimestamp()
-            end.FromDatetime(dt.datetime.now())
-            request.end.CopyFrom(end)
-
-        if not request.interval:
-            request.interval = 5
-
-        q = self.manager.Queue()
-        messageList = []
-        serquest = request.SerializeToString()
-        self.comq.put(("request", "intradayBarRequest", (serquest, q, clientid)))
-        loop = asyncio.get_event_loop()
-        while True:
-            msg = await loop.run_in_executor(None, q.get)
-            messageList.append(msg[1]["data"])
-            if not msg[1]["partial"]:
-                break
-        if messageList:
-            result = buildIntradayBarResponse(messageList)
-            return result
-        else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
     async def referenceDataRequest(self, request: ReferenceDataRequest,
                                    context: grpc.aio.ServicerContext) -> ReferenceDataResponse:
         clientid = self._makeClientId(context)
         topicstr = ",".join(request.topics)
         logger.info(f"Received reference data request {topicstr} from {clientid}")
-        q = self.manager.Queue()
-        messageList = []
-        serquest = request.SerializeToString()
-        self.comq.put(("request", "referenceDataRequest", (serquest, q, clientid)))
-        loop = asyncio.get_event_loop()
-        while True:
-            msg = await loop.run_in_executor(None, q.get)
-            messageList.append(msg[1]["data"])
-            if not msg[1]["partial"]:
-                break
-        if messageList:
-            result = buildReferenceDataResponse(messageList)
-            return result
-        else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+        result = await self.stub.referenceDataRequest(request)
+        return result
 
 
     async def sub(self, topicList: TopicList, context: grpc.aio.ServicerContext) -> TopicList:
@@ -802,13 +790,7 @@ class Bbg(BbgServicer):
     async def subscriptionInfo(self, _request, 
                                context: grpc.aio.ServicerContext) -> TopicList:
         clientid = self._makeClientId(context)
-        manager = Manager()
-        q = manager.Queue()
-        self.comq.put(("request", "subscriptionInfo", (clientid, q)))
         logger.info(f"Received subscription info request from {clientid}")
-        loop = asyncio.get_event_loop()
-        tlist = await loop.run_in_executor(None, q.get)
-        return TopicList.FromString(tlist)
 
 
     async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
