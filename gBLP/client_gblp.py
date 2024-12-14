@@ -27,6 +27,7 @@ from queue import Queue
 from rich.console import Console; console = Console()
 from google.protobuf import empty_pb2
 import json
+import numpy as np
 
 from gBLP.constants import (
     MAX_MESSAGE_LENGTH, 
@@ -36,6 +37,7 @@ from gBLP.constants import (
 
 # TODO FIRST RELEASE
 # * client open and close explicitly instead of on instantiation
+# * unsubscribe on cancel error in Session class
 # * server correlators must show who is correlating
 # * write tests
 # * write examples
@@ -251,6 +253,7 @@ class Bbg:
         args = {k: v for k, v in locals().items() if v is not None and k != "self"}
         hreq = bloomberg_pb2.HistoricalDataRequest(**args)
         logger.info(f"Requesting historical data: {hreq}")
+        console.print(f"[bold blue]self.name: {self.name}")
         data = await self.stub.historicalDataRequest(hreq, metadata=[("client", self.name)])
         return data
 
@@ -469,11 +472,37 @@ class HandlerTime():
                 if fv.name == "LAST_PRICE_TIME_TODAY_REALTIME":
                     print(response.fieldvals.servertimestamp.seconds - fv.val.number_value)
 
-class HandlerTimeBars():
+class HandlerLagWatchBars():
+    """ prints the lag between the server timestamp and the timestamp of the bar """
+    def __init__(self):
+        self.nowstamp = dt.datetime.now()
+        self.counter = 0
+        self.lags = []
+
     async def handle(self, response):
-        if response.HasField("barvals"):
-            if response.barvals.HasField("timestamp"):
-                print(response.barvals.servertimestamp.seconds - response.barvals.timestamp.seconds)
+        self.counter += 1
+        if (dt.datetime.now() - self.nowstamp).total_seconds() > 1:
+            print(f"Counter: {self.counter}")
+            if self.lags:
+                try:
+                    print(f"Avg Lag: {sum(self.lags)/len(self.lags)}")
+                    print(f"Max Lag: {max(self.lags)}")
+                    print(f"Min Lag: {min(self.lags)}")
+                    if(len(self.lags) > 1):
+                        print(f"SD Lag: {np.std(self.lags)}")
+                except Exception as e:
+                    console.print(f"[bold red]Error in HandlerLagWatchBars: {e}")
+            self.counter = 0
+            self.nowstamp = dt.datetime.now()
+            self.lags = []
+
+
+        if response.HasField("fieldvals"):
+            lptr = [fv for fv in response.fieldvals.vals if fv.name == "LAST_PRICE_TIME_TODAY_REALTIME"]
+            if lptr:
+                stamp = lptr[0].val.number_value
+                lag = response.fieldvals.servertimestamp.seconds - stamp
+                self.lags.append(lag)
 
 class HandlerPrintnum():
     async def handle(self, response):
@@ -481,6 +510,8 @@ class HandlerPrintnum():
             for fv in response.fieldvals.vals:
                 if fv.name == "LAST_PRICE":
                     print(fv.val.number_value)  
+
+
 
 if __name__ == "__main__":
 
@@ -491,18 +522,17 @@ if __name__ == "__main__":
         data = dict()
         bbg = Bbg()
 
-        subs1 = bbg.mtl(["XBTUSD Curncy"], DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs1)
-        subs2 = bbg.mtl(["XETUSD Curncy"], DEFAULT_FIELDS, bar=True, interval = 1)
-        bbg.sub(subs2)
-        subs3 = bbg.mtl(["USDZAR Curncy"], DEFAULT_FIELDS, bar=True, interval = 1)
-        bbg.sub(subs3)
-        subs4 = bbg.mtl(["NVDA US Equity"], DEFAULT_FIELDS, bar=True, interval = 1)
-        bbg.sub(subs4)
-        subs5 = bbg.mtl(["RNO FP Equity"], DEFAULT_FIELDS, bar=False, interval = 1)
-        bbg.sub(subs5)
-        subs6 = bbg.mtl(["ILS Curncy"], DEFAULT_FIELDS, bar=True, interval = 1)
-        bbg.sub(subs6)
+        cryptosubs = True
+        if cryptosubs:
+            with open("examples/tickers/crypto.json") as jf:
+                cryptos = json.load(jf)["crypto"]
+            handler = HandlerLagWatchBars()
+            subs1 = bbg.mtl(cryptos, DEFAULT_FIELDS, bar=False, interval = 1)
+            #bbg.sub(subs1, handler = handler)
+            bbg.sub(subs1)
+
+
+
 
         IPython.embed()
 

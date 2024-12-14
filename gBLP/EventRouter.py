@@ -29,7 +29,7 @@ class EventRouter(object):
             logger.warning(f"Correlator {cid} not found")
             return
         q = correlator["q"]
-        q.put(sendmsg)
+        q.put_nowait(sendmsg)
 
 
     def getTimeStamp(self):
@@ -40,7 +40,7 @@ class EventRouter(object):
             cid = msg.correlationId().value()
             logger.info((f"Received response to request {msg.getRequestId()} "
                         f"partial {partial}"))
-            sendmsg = ("ref", {"cid": cid, "partial": partial, "data": msg.toPy()})
+            sendmsg = {"cid": cid, "partial": partial, "data": msg.toPy()}
             # now put message into correct asyncio queue. Ceremony here is because we're calling async from sync
             self.simplesend(cid, sendmsg)
             if not partial:   # then we're done with this so deleate the correlator entry
@@ -53,17 +53,17 @@ class EventRouter(object):
             match topic.status.statustype:
                 case statusType.SubscriptionFailure:
                     logger.warning(f"Received subscription failure status: {topicStr}")
-                    self.simplesend(cid, ("status", topic.SerializeToString()))
+                    self.simplesend(cid, topic)
                     self.parent.correlators.pop(cid, None) # pop only after simplesend
                 case statusType.SubscriptionStarted:
                     logger.success(f"Subscription started: {topicStr}")
-                    self.simplesend(cid, ("status", topic.SerializeToString()))
+                    self.simplesend(cid, topic)
                 case statusType.SubscriptionTerminated:
                     logger.success(f"SubscriptionTerminated: {topicStr}")
-                    self.simplesend(cid, ("status", topic.SerializeToString()))
+                    self.simplesend(cid, topic)
                     self.parent.correlators.pop(cid, None)
                 case _:
-                    self.simplesend(cid, ("status", topic.SerializeToString()))
+                    self.simplesend(cid, topic)
 
 
     def processMiscEvents(self, event):
@@ -89,13 +89,13 @@ class EventRouter(object):
                            blpapi.Name("MarketBarEnd"),
                            blpapi.Name("MarketBarIntervalEnd")):
                 cid, topic = makeBarMessage(msg, self.parent.correlators)
-                self.simplesend(cid, ("bar", topic.SerializeToString()))
+                self.simplesend(cid, topic)
 
             # subscription --->
             elif msgtype == blpapi.Name("MarketDataEvents"):
                 cid, yesfoundfields, topic = makeTickMessage(msg, self.parent.correlators)
                 if yesfoundfields:
-                    self.simplesend(cid, ("tick", topic.SerializeToString()))
+                    self.simplesend(cid, topic)
             # something else --->
             else:
                 logger.debug(f"!!!!!!!!!!!!!!!! Unknown message type {msgtype}") # DEBUG
