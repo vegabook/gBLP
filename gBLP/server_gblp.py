@@ -362,7 +362,6 @@ class SessionRunner(BbgServicer):
 
 
         # send request to bloomberg 
-        logger.info(f"Requesting historical data {request}")
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
             return []
@@ -541,19 +540,31 @@ class SessionRunner(BbgServicer):
 
     # ------------ subscriptions -------------------
 
-    def makeCorrelatorString(self, topic: Topic, service: str) -> str:
+    def makeCorrelatorString(self, topic: Topic, service: str, clientid = None) -> str:
+        """ make a unique correlator string """
         intervalstr = f"interval={int(topic.interval)}"
         fieldsstr = ",".join(topic.fields)
         topicTypeName = topicType.Name(topic.topictype) # SEDOL1/TICKER/CUSIP etc
-        # substring will be used as the correlation ID _and_ the subscription string
-        substring = f"{service}/{topicTypeName}/{topic.topic}?fields={fieldsstr}&{intervalstr}"
+        corrstring = f"{service}/{topic.topic}?fields={fieldsstr}&{intervalstr}" 
+        if clientid:
+            corrstring = f"{clientid}/{corrstring}"
+        return str(hash(corrstring))
+
+
+    def makeSubString(self, topic: Topic, service: str) -> str:
+        """ make a valid Bloomberg subscription string """
+        intervalstr = f"interval={int(topic.interval)}"
+        fieldsstr = ",".join(topic.fields)
+        topicTypeName = topicType.Name(topic.topictype) # SEDOL1/TICKER/CUSIP etc
         substring = f"{service}/{topic.topic}?fields={fieldsstr}&{intervalstr}" 
         return substring
 
 
     async def sub(self, topicList: TopicList, context: grpc.aio.ServicerContext) -> TopicList:
         """ subscribe to a list of topics """
-        
+
+        clientid = dict(context.invocation_metadata()).get("client")
+
         # make sure the service is open
         _success, barservice = self._getService("BarSubscribe")
         _success, tickservice = self._getService("Subscribe")
@@ -562,15 +573,18 @@ class SessionRunner(BbgServicer):
         subq = asyncio.Queue() # for responses
         for t in topicList.topics:
             if t.subtype == subscriptionType.BAR:
-                substring = self.makeCorrelatorString(t, barservice)
-                correlid = blpapi.CorrelationId(substring)
+                substring = self.makeSubString(t, barservice)
+                corrstring = self.makeCorrelatorString(t, barservice, clientid)
+                correlid = blpapi.CorrelationId(corrstring)
                 barsublist.add(substring, correlationId=correlid)
             else:
-                substring = self.makeCorrelatorString(t, tickservice)
-                correlid = blpapi.CorrelationId(substring) 
+                substring = self.makeSubString(t, tickservice)
+                corrstring = self.makeCorrelatorString(t, tickservice, clientid)
+                correlid = blpapi.CorrelationId(corrstring) 
                 ticksublist.add(substring, correlationId=correlid)
-            self.correlators[substring] = {"q": subq, 
+            self.correlators[corrstring] = {"q": subq, 
                                            "topic": t, 
+                                           "clientid": clientid,
                                            "correlid": correlid}
         if barsublist.size() > 0:
             self.session.subscribe(barsublist)
@@ -594,6 +608,9 @@ class SessionRunner(BbgServicer):
     async def subscriptionInfo(self, _request, 
                                context: grpc.aio.ServicerContext) -> TopicList:
         """ get the current subscription list """
+
+        clientid = dict(context.invocation_metadata()).get("client")
+
         tl = TopicList()
         for v in self.correlators.values():
             if v["clientid"] == clientid:
@@ -605,6 +622,9 @@ class SessionRunner(BbgServicer):
         """ unsubscribe from a list of topics. Note removal from the 
         correlators only happens when the event handler receives the
         unsubscription event."""
+
+        clientid = dict(context.invocation_metadata()).get("client")
+
         _success, barservice = self._getService("BarSubscribe")
         _success, tickservice = self._getService("Subscribe")
         substrings = [] # will refer to these later to make sure unsubbed
@@ -614,13 +634,14 @@ class SessionRunner(BbgServicer):
                 service = self.servicesOpen["BarSubscribe"]
             else:
                 service = self.servicesOpen["Subscribe"]
-            substring = self.makeCorrelatorString(t, service)
-            correlator = self.correlators.get(substring)
+            corrstring = self.makeCorrelatorString(t, service, clientid)
+            correlator = self.correlators.get(corrstring)
             if not correlator:
                 logger.warning(f"Correlator not found for {substring}")
                 continue # skip this one if no correlator found
             else:
                 logger.info(f"Unsubscribing: {makeTopicString(t)}")
+                substring = self.makeSubString(t, service)
                 substrings.append(substring)
                 correlid = correlator["correlid"]
                 bbgunsublist.add(substring, correlationId=correlid) 
@@ -770,10 +791,15 @@ class Bbg(BbgServicer):
         clientid = self._makeClientId(context)
         topicstr = ",".join([t.topic for t in topicList.topics])
         logger.info(f"Received subscription request {topicstr} from {clientid}")
-        stream = self.stub.sub(topicList)
+        stream = self.stub.sub(topicList, metadata=[("client", clientid)])
         try:
             async for topic in stream:
                 yield topic
+        # except cancelled error
+        except asyncio.CancelledError:
+            logger.info("Subscription stream cancelled, unsubscribing.")
+            await self.unsub(topicList, context)
+            raise
         except grpc.aio.AioRpcError as e:
             logger.error(f"Error in subscription stream: {e}")
             raise
@@ -783,7 +809,7 @@ class Bbg(BbgServicer):
         clientid = self._makeClientId(context)
         topicstr = ",".join([t.topic for t in topicList.topics])
         logger.info(f"Received unsubscription request {topicstr} from {clientid}")
-        self.stub.unsub(topicList)
+        self.stub.unsub(topicList, metadata=[("client", clientid)])
         return empty_pb2.Empty()
 
 
@@ -791,6 +817,8 @@ class Bbg(BbgServicer):
                                context: grpc.aio.ServicerContext) -> TopicList:
         clientid = self._makeClientId(context)
         logger.info(f"Received subscription info request from {clientid}")
+        result = await self.stub.subscriptionInfo(_request, metadata=[("client", clientid)])
+        return result
 
 
     async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:

@@ -266,7 +266,6 @@ def buildHistoricalDataResponse(data):
     https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf#page=170
     """
     response =bbpb2.HistoricalDataResponse()
-    logger.debug(f"buildHistoricalDataResponse data: {data}, data type: {type(data)}")
     for sec in data:
         response.securitydata.append(createSecurityData(sec["securityData"]))
         if sec.get('securityError'):
