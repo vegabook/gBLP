@@ -43,8 +43,8 @@
             python312Packages.poetry-core
             python312Packages.loguru
             python312Packages.requests
-            python312Packages.ruff
             python312Packages.vulture
+            ruff
             poetry
             grpc-tools
             openssl_3_3
