@@ -210,7 +210,7 @@ def createFieldException(fieldExceptionDict):
     return fieldException
 
 def createSecurityData(securityDataDict):
-    securityData =bbpb2.SecurityData()
+    securityData = bbpb2.SecurityData()
     securityData.security = securityDataDict.get("security", "")
     securityData.sequenceNumber = securityDataDict.get("sequenceNumber", 0)
     # Handle fieldData
@@ -237,7 +237,7 @@ def createResponse(dataList):
     response =bbpb2.Response()
     for item in dataList:
         securityData = createSecurityData(item)
-        response.securitydata.append(securityData)
+        response.securityData.append(securityData)
     return response
 
 
@@ -257,7 +257,7 @@ def buildReferenceDataResponse(data):
                 err = createErrorInfo(sec["securityError"])
                 response.responseError.CopyFrom(err)
             else:
-                response.securitydata.append(createSecurityData(sec))
+                response.securityData.append(createSecurityData(sec))
     return response
 
 
@@ -267,7 +267,11 @@ def buildHistoricalDataResponse(data):
     """
     response =bbpb2.HistoricalDataResponse()
     for sec in data:
-        response.securitydata.append(createSecurityData(sec["securityData"]))
+        if sec.get('responseError'):
+            err = createErrorInfo(sec["responseError"])
+            response.responseError.CopyFrom(err)
+            break
+        response.securityData.append(createSecurityData(sec["securityData"]))
         if sec.get('securityError'):
             err = createErrorInfo(sec["securityError"])
             response.securityError.CopyFrom(err)

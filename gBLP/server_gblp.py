@@ -1,4 +1,4 @@
-# colorscheme blue dark
+# colorscheme blue dark 
 
 # ---------------------------- gBLP LICENCE ---------------------------------
 # Licensed under the GNU General Public License, Version 3.0 (the "License");
@@ -53,14 +53,18 @@ from gBLP.bloomberg_pb2 import (
     Ping,
     Pong,
     topicType,
-    subscriptionType)
+    subscriptionType, 
+    ServicesInfoRequest,
+    ServicesInfoResponse,
+    ServiceInfo)
 
 from gBLP.bloomberg_pb2_grpc import (
     BbgServicer, 
     KeyManagerServicer, 
     add_BbgServicer_to_server, 
     add_KeyManagerServicer_to_server, 
-    BbgStub)
+    BbgStub
+)
 
 from gBLP.responseParsers import (
     buildHistoricalDataResponse, 
@@ -68,6 +72,13 @@ from gBLP.responseParsers import (
     buildReferenceDataResponse,
     makeTopicString
 )
+
+from gBLP.requestHelpers import (
+    bool_evaluator,
+    add_dates_to_request_if_missing,
+    add_overrides_to_bbgrequest
+)
+
 
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
@@ -348,30 +359,26 @@ class SessionRunner(BbgServicer):
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
 
-        # validate and complete
-        if not request.HasField("start"):
-            start = protoTimestamp()
-            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=365))
-            request.start.CopyFrom(start)
-        if not request.HasField("end"):
-            end = protoTimestamp()
-            end.FromDatetime(dt.datetime.now())
-            request.end.CopyFrom(end)
-        if not request.fields:
-            request.fields.extend(["LAST_PRICE"])
+        # validate dates
+        request = add_dates_to_request_if_missing(request)
 
-
-        # send request to bloomberg 
+        # make request dict
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
-            return []
+            raise context.abort(grpc.StatusCode.NOT_FOUND, "Service not found")
         dtstart = request.start.ToDatetime().strftime("%Y%m%d")
         dtend = request.end.ToDatetime().strftime("%Y%m%d")
         requestDict = {"securities": request.topics,
                        "fields": request.fields,
                        "startDate": dtstart,
                        "endDate": dtend} # TODO OVERRIDES
-        bbgRequest.fromPy(requestDict)
+
+        # make bbg request and add options and overrides
+        requestDict = requestDict | bool_evaluator(request.options) # make options dict and merge
+        bbgRequest.fromPy(requestDict) # make bbgrequest
+        bbgRequest = add_overrides_to_bbgrequest(bbgRequest, request.overrides)
+
+        # send request to bloomberg 
         # create a random 32-character string as the correlationId
         corrString = f"hist:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
@@ -401,31 +408,28 @@ class SessionRunner(BbgServicer):
         """ request intraday bar data """
 
         # validate and complete
-        if not request.HasField("start"):
-            start = protoTimestamp()
-            start.FromDatetime(dt.datetime.now() - dt.timedelta(days=140))
-            request.start.CopyFrom(start)
-        if not request.HasField("end"):
-            end = protoTimestamp()
-            end.FromDatetime(dt.datetime.now())
-            request.end.CopyFrom(end)
-        if not request.interval:
-            request.interval = 5
+        request = add_dates_to_request_if_missing(request)
 
         # send request to bloomberg 
         logger.info(f"Requesting intraday bar data {str(request.topic)}")
         success, bbgRequest = self._createEmptyRequest("IntradayBarRequest")
         if not success:
-            return []
+            raise context.abort(grpc.StatusCode.NOT_FOUND, "Service not found")
         dtstart = request.start.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
         dtend = request.end.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
+        if not request.interval:
+            request.interval = 5
         requestDict = {"security": request.topic,
                        "eventType": "TRADE",
                        "startDateTime": dtstart,
                        "endDateTime": dtend,
                        "gapFillInitialBar": "true",
                        "interval": request.interval} # TODO OVERRIDES
+
+        # make bbg request and add interval and options (no overrides for intradayBarRequest)
+        requestDict = requestDict | bool_evaluator(request.options) # make options dict and merge
         bbgRequest.fromPy(requestDict)
+
         # create a random 32-character string as the correlationId
         corrString = f"bar:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
@@ -455,23 +459,29 @@ class SessionRunner(BbgServicer):
         """ request reference data """
 
         # send request to bloomberg
-        logger.info(f"Requesting reference data {request}")
+        logger.info((f"Reference request recieved. "
+                     f"Topics: {' '.join(list(request.topics))} "
+                     f"Fields: {' '.join(list(request.fields))}"))
         success, bbgRequest = self._createEmptyRequest("ReferenceDataRequest")
         if not success:
-            return []
+            raise context.abort(grpc.StatusCode.NOT_FOUND, "Service not found")
         logger.info(f"setting securities {request.topics}")
         requestDict = {"securities": request.topics,
                        "fields": request.fields}
-        if request.overrides:
-            requestDict["overrides"] = request.overrides
-        bbgRequest.fromPy(requestDict)
+
+        # make bbg request and add options and overrides
+        requestDict = requestDict | bool_evaluator(request.options) # make options dict and merge
+        bbgRequest.fromPy(requestDict) # make bbgrequest
+        bbgRequest = add_overrides_to_bbgrequest(bbgRequest, request.overrides)
+
         corrString = f"ref:{makeName(alphaLength = 32, digitLength = 0)}"
         correlid = blpapi.CorrelationId(corrString)
         q = asyncio.Queue() 
         self.correlators[corrString] = {"q": q,
                                        "request": request}
         self.session.sendRequest(bbgRequest, correlationId=correlid)
-
+       
+        # wait for response
         messageList = []
         while True:
             msg = await q.get()
@@ -485,25 +495,24 @@ class SessionRunner(BbgServicer):
             context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
-    # -------------- DEBUG ---------------
-
-    async def serviceInfo(self):
-        """ get the service info """
-        for service in self.servicesAvail.keys():
-            try:
-                console.print(f"[bold blue]Service {service}")
-                succes, req = self._createEmptyRequest(service)
-                info = req.asElement().elementDefinition()
-                console.print(f"[bold orange1]{dir(info)}") 
-                print(info.toString())
-            except Exception as e:
-                logger.error(f"Error in service info: {e}")
-                # print full trace
-                traceback.print_exc()
-
-    # -------------- !DEBUG ---------------
-
-
+    async def servicesInfoRequest(self, _request,
+                                 context: grpc.aio.ServicerContext) -> ServicesInfoResponse:
+        refservices = set([v for k, v in self.servicesAvail.items() if "subscribe" not in k.lower()])
+        sir = ServicesInfoResponse()
+        for service in filter(lambda x: "subscribe" not in x.lower(), self.servicesAvail.keys()):
+            logger.info(f"Requesting service info for {service}")
+            success, req = self._createEmptyRequest(service)
+            if not success:
+                info = "No service info"
+            else:
+                try:
+                    inforesp = req.asElement().elementDefinition()
+                    info = inforesp.toString() # LATER may be better ways; check methods on inforesp
+                except Exception as e:
+                    info = "No service info"
+            si = ServiceInfo(serviceName=service, serviceDescription=info)
+            sir.services.append(si)
+        return sir
 
 
     def open(self):
@@ -818,6 +827,13 @@ class Bbg(BbgServicer):
         clientid = self._makeClientId(context)
         logger.info(f"Received subscription info request from {clientid}")
         result = await self.stub.subscriptionInfo(_request, metadata=[("client", clientid)])
+        return result
+
+    async def servicesInfoRequest(self, _request, 
+                                 context: grpc.aio.ServicerContext) -> ServicesInfoResponse:
+        clientid = self._makeClientId(context)
+        logger.info(f"Received service info request from {clientid}")
+        result = await self.stub.servicesInfoRequest(_request, metadata=[("client", clientid)])
         return result
 
 

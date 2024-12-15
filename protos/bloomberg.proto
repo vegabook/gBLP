@@ -24,6 +24,7 @@ service Bbg {
   //rpc intradayTickRequest. maybe "tick" or "gblpTick"
   rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
   rpc referenceDataRequest(ReferenceDataRequest) returns (ReferenceDataResponse) {}
+  rpc servicesInfoRequest(google.protobuf.Empty) returns (ServicesInfoResponse) {}
   rpc ping(Ping) returns (Pong) {}
 }
 
@@ -110,13 +111,14 @@ message TopicList {
 message ReferenceDataRequest {
   repeated string topics = 1; // securities
   repeated string fields = 2; // fields list
-  map <string, string> overrides = 3; // overrides
+  map <string, string> options = 3; // overrides
+  map <string, string> overrides = 4; // overrides
 }
 
 
 message ReferenceDataResponse {
   ErrorInfo responseError = 1;
-  repeated SecurityData securitydata = 2;
+  repeated SecurityData securityData = 2;
 }
 
 
@@ -124,7 +126,7 @@ message ReferenceDataResponse {
 
 // Top-level message containing all security data
 message Response {
-    repeated SecurityData securitydata = 1;
+    repeated SecurityData securityData = 1;
 }
 
 // Represents data for each security
@@ -183,7 +185,6 @@ message ListValue {
     repeated Value values = 1;
 }
 
-
 /////////////// IntradayBar data //////////////////
 
 //see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p177
@@ -193,7 +194,7 @@ message IntradayBarRequest {
   google.protobuf.Timestamp start = 3; // startDate
   google.protobuf.Timestamp end = 4; // endDate
   int32 interval = 5; // interval in minutes
-  map <string, string> options = 6; // overrides
+  map <string, string> options = 6; 
 }	
 
 message IntradayBarResponse {
@@ -223,6 +224,7 @@ message HistoricalDataRequest {
   google.protobuf.Timestamp start = 4; // startDate
   google.protobuf.Timestamp end = 5; // endDate
   map <string, string> options = 6; // overrides
+  map <string, string> overrides = 7; // overrides
 }
 
 
@@ -230,9 +232,24 @@ message HistoricalDataRequest {
 message HistoricalDataResponse {
     // An array of items, each containing security data
     ErrorInfo responseError = 1;
-    repeated SecurityData securitydata = 2;
+    repeated SecurityData securityData = 2;
 }
 
+
+/////////////// Service Information //////////////////
+
+message ServicesInfoRequest {
+  string id = 1;
+}
+
+message ServicesInfoResponse {
+  repeated ServiceInfo services = 1;
+}
+
+message ServiceInfo {
+  string serviceName = 1;
+  string serviceDescription = 2;
+}
 
 /////////////// Key management //////////////////
 

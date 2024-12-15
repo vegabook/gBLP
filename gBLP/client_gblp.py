@@ -38,16 +38,12 @@ from gBLP.constants import (
 # TODO FIRST RELEASE
 # * client open and close explicitly instead of on instantiation
 # * unsubscribe on cancel error in Session class
-# * server correlators must show who is correlating
 # * write tests
 # * write examples
 # * write documentation
-# * overrides
-# * put colours into logger and upgrade to loguru
 # TODO FROLLOW UP RELEASE
 # * session reconnection with resubscription
 # * check UTC status (recall reference data request must have UTC TRUE specified)
-# * comq and process per client
 # * curve data request
 # * intraday tick request
 # * instrument search request
@@ -232,24 +228,46 @@ class Bbg:
 
 
 
-
     def historicalDataRequest(self, 
                               topics, 
-                              fields = None,
+                              fields,
                               start = None,
                               end = None, 
-                              options = None) -> bloomberg_pb2.HistoricalDataResponse:
+                              options = None, 
+                              overrides = None) -> bloomberg_pb2.HistoricalDataResponse:
         if not type(topics) == list and all(isinstance(topic, str) for topic in topics):
             logger.error("Topics must be a list of strings.")
             return  
-        return self._loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
+        if not type(fields) == list and all(isinstance(field, str) for field in fields):
+            logger.error("Fields must be a list of strings.")
+            return
+        if type(start) == dt.datetime or type(start) == dt.date:
+            newstart = protoTimestamp() 
+            newstart.FromDatetime(dt.datetime.combine(start, dt.time.min)) #ensure minutes
+            start = newstart
+        if type(end) == dt.datetime or type(end) == dt.date:
+            newend = protoTimestamp() 
+            newend.FromDatetime(dt.datetime.combine(end, dt.time.min)) # ensure minutes
+            end = newend
+        if overrides:
+            if not type(overrides) == dict:
+                logger.error("Overrides must be a dict.")
+                return
+        if options:
+            if not type(options) == dict:
+                logger.error("Options must be a dict.")
+                return
+
+
+        return self._loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options, overrides))
 
     async def async_historicalDataRequest(self, 
                                           topics, 
                                           fields, 
                                           start, 
                                           end, 
-                                          options) -> bloomberg_pb2.HistoricalDataResponse:
+                                          options, 
+                                          overrides) -> bloomberg_pb2.HistoricalDataResponse:
         args = {k: v for k, v in locals().items() if v is not None and k != "self"}
         hreq = bloomberg_pb2.HistoricalDataRequest(**args)
         logger.info(f"Requesting historical data: {hreq}")
@@ -265,9 +283,21 @@ class Bbg:
                            end = None,  # defaults on server side
                            interval = None, # defaults on server side
                            options = None) -> bloomberg_pb2.IntradayBarResponse:
+        if type(start) == dt.datetime or type(start) == dt.date:
+            newstart = protoTimestamp() 
+            newstart.FromDatetime(dt.datetime.combine(start, dt.time.min)) #ensure minutes
+            start = newstart
+        if type(end) == dt.datetime or type(end) == dt.date:
+            newend = protoTimestamp() 
+            newend.FromDatetime(dt.datetime.combine(end, dt.time.min)) # ensure minutes
+            end = newend
         if not type(topic) == str:
             logger.error("Topic must be a string.")
             return
+        if options:
+            if not type(options) == dict:
+                logger.error("Options must be a dict.")
+                return
         return self._loop_run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
 
     async def async_intradayBarRequest(self, 
@@ -284,9 +314,11 @@ class Bbg:
         return data
 
 
+
     def referenceDataRequest(self,
                              topics,
                              fields,
+                             options = None,
                              overrides = None) -> bloomberg_pb2.ReferenceDataResponse:
 
         if not type(topics) == list:
@@ -295,15 +327,26 @@ class Bbg:
         if not type(fields) == list:
             logger.error("Fields must be a list.")
             return
-        return self._loop_run_async(self.async_referenceDataRequest(topics, fields, overrides))
+        if overrides:
+            if not type(overrides) == dict:
+                logger.error("Overrides must be a dict.")
+                return
+        if options:
+            if not type(options) == dict:
+                logger.error("Options must be a dict.")
+                return
+
+        return self._loop_run_async(self.async_referenceDataRequest(topics, fields, options, overrides))
 
     async def async_referenceDataRequest(self,
                                          topics,
                                          fields,
-                                         overrides) -> bloomberg_pb2.ReferenceDataResponse:
+                                         options = None,
+                                         overrides = None) -> bloomberg_pb2.ReferenceDataResponse:
         refreq = bloomberg_pb2.ReferenceDataRequest(
             topics=topics,
             fields=fields,
+            options=options,
             overrides=overrides
         )
         logger.info(f"Requesting reference data: {refreq}")
@@ -409,6 +452,15 @@ class Bbg:
 
     async def async_subscriptionInfo(self):
         response = await self.stub.subscriptionInfo(empty_pb2.Empty(), metadata=[("client", self.name)])
+        return response
+
+
+    def servicesInfoRequest(self) -> bloomberg_pb2.ServicesInfoResponse:
+        response = self._loop_run_async(self.async_servicesInfoRequest())
+        return response
+
+    async def async_servicesInfoRequest(self) -> bloomberg_pb2.ServicesInfoResponse:
+        response = await self.stub.servicesInfoRequest(empty_pb2.Empty(), metadata=[("client", self.name)])
         return response
 
 

@@ -55,7 +55,7 @@ def printLicence():
 def printBeta():
     betatxt = ("This software is currently in beta testing. Features may be unstable "
                "and undergoing ongoing testing. Please continuously monitor the repository "
-               "https://github.com/vegabook/gBLP for updates and bug fixes.")
+               "https://github.com/vegabook/gBLP for updates and bug fixes. THE API REMAINS SUBJECT TO CHANGE.")
                
     title = f"[bold orange1]BETA[/bold orange1]"
     panel = Panel(betatxt, box=SQUARE, style="orange1", title=title)
