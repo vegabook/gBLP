@@ -23,8 +23,8 @@ A gRPC server that wraps the Bloomberg V3 API.
 
 ## Status
 * Beta, but 90% of what 90% of users need is working.
-* Python only client for now, but feel free to look at the [proto files](protos/bloomberg.proto)
-* Elixir,Swift, and Typescript are next, in that order. Priority to REPL-friendly languages. 
+* Python only client for now, but feel free to look at the [proto files](protos/bloomberg.proto).
+* Elixir, Swift, and Typescript are next, in that order. Priority to REPL-friendly languages. 
 
 
 ## What's working
