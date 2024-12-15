@@ -11,4 +11,6 @@ psutil
 pytest
 loguru
 requests
+ruff
+vulture
 
