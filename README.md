@@ -10,22 +10,38 @@ This software is provided "as is," without warranty of any kind, express or impl
 
 $$\textcolor{JungleGreen}{\rule{120cm}{0.5mm}}$$
 
+## What?
+A gRPC server that wraps the Bloomberg V3 API. 
+
 
 ## Why?
-* Streaming: a fully featured subscription API in your python or Jupyter repl, that updates in real time.
+* Streaming: a fully featured subscription API that operates in a separate thread, allowing REPL or Jupyter interactivity.
 * Multi-language: gRPC allows you to use the same API in any language that supports it. 
-* Multi-OS: No more Windows-only (see licence below). 
+* Blpapi on Linux, MacOS, or Windows (see the licence).
+* Robust gRPC based API mapping with almost total coverage of the Bloomberg API. 
 
 
 ## Status
-Beta as of 24 Nov 2024. 
-* `historicalDataRequest` is working (daily data).
-* `intradayBarRequest` is working (minute or greater bars).
-* `referenceDataRequest` is working.
-* `sub` / `unsub` are working.
-* full status message support.
-* For now python client only in this repo. More soon. 
-* Beta testers welcome (you'll need a Bloomberg terminal).
+* Beta, but 90% of what 90% of users need is working.
+* Python only client for now, but feel free to look at the [proto files](protos/bloomberg.proto)
+* Elixir,Swift, and Typescript are next, in that order. Priority to REPL-friendly languages. 
+
+
+## What's working
+
+* Subscription subsystem. Unlike most api libraries, this one supports live data. 
+* HistoricalDataRequest. Daily or longer periodicity data. 
+* IntradayBarRequest. Minute or greater bars.
+* IntradayTickRequest. Tick data.
+* ReferenceDataRequest. Information on any security. 
+
+## Not yet
+* instrumentListRequest
+* curveListRequest
+* govtListRequest
+* FieldListRequest
+* FieldSearchRequest
+* FieldInfoRequest
 
 ## Installation
 `pip install gBLP --extra-index-url https://blpapi.bloomberg.com/repository/releases/python/simple/`  

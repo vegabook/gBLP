@@ -465,7 +465,6 @@ class SessionRunner(BbgServicer):
         success, bbgRequest = self._createEmptyRequest("ReferenceDataRequest")
         if not success:
             raise context.abort(grpc.StatusCode.NOT_FOUND, "Service not found")
-        logger.info(f"setting securities {request.topics}")
         requestDict = {"securities": request.topics,
                        "fields": request.fields}
 
