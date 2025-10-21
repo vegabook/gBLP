@@ -43,7 +43,7 @@ gblp-serve = "gBLP.serve_gblp:main"
 name = "bloomberg"
 url = "https://blpapi.bloomberg.com/repository/releases/python/simple/"
 
-[tool.poetry.dev-dependencies]
+[poetry.group.dev.dependencies]
 pytest = "^8.3.3"
 
 [build-system]
