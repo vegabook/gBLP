@@ -44,7 +44,11 @@ A gRPC server that wraps the Bloomberg V3 API.
 * FieldInfoRequest
 
 ## Installation
-`pip install gBLP --extra-index-url https://blpapi.bloomberg.com/repository/releases/python/simple/`  
+clone repo
+`cd gBLP`
+`python -m pip install poetry`
+`poetry build`
+`python -m pip install gBLP --extra-index-url https://blpapi.bloomberg.com/repository/releases/python/simple/`  
 Generate security certificates with the following command.   
 `server_gblp --gencerts --grpchost <server_ip_or_hostname>`  
 Here `localhost` is fine if you're staying on Windows on the same VM or machine, but otherwise you should use an IP address that is reachable from your client.  
