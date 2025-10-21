@@ -44,9 +44,9 @@ A gRPC server that wraps the Bloomberg V3 API.
 * FieldInfoRequest
 
 ## Installation
-clone repo
+clone repo. 
 `cd gBLP`
-`python -m pip install poetry`
+`python -m pip install poetry` of if you're on nix, `nix develop`
 `poetry build`
 `python -m pip install gBLP --extra-index-url https://blpapi.bloomberg.com/repository/releases/python/simple/`  
 Generate security certificates with the following command.   
