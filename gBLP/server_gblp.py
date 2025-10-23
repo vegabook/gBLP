@@ -16,7 +16,7 @@ import grpc; grpc.aio.init_grpc_aio()
 
 # python imports
 import os
-os.environ["GRPC_VERBOSITY"] = "debug"
+os.environ["GRPC_VERBOSITY"] = "error"
 import asyncio; asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import string
 import random
@@ -930,7 +930,7 @@ def main():
     globalOptions = parseCmdLine()
     if globalOptions.gencerts:
         if not globalOptions.grpchost:
-            print(("Must specify --grpchost xxxx where xxx is server hostname or IP address "
+            print(("Must specify --grpchost xxxx where xxxx is server hostname or IP address "
                    "when using --gencerts."))
             return
         else:
