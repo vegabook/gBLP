@@ -191,7 +191,7 @@ class KeyManager(KeyManagerServicer):
     def __init__(self):
         pass
 
-    async def input_timeout(prompt, timeout):
+    async def input_timeout(self, prompt, timeout):
         session = PromptSession()
         try:
             # Prompt with timeout; raises EOFError on timeout
