@@ -50,18 +50,22 @@
             openssl_3_3
             certstrap
           ];
-          shellHook = ''
-            alias ipy="ipython --nosep"
-            alias exit="deactivate && exit"
-            export PS1="🧢 \e[38;5;211m\]g\e[38;5;111mBLP\[\e[0m $PS1";
-            if [ ! -d venv ]; then
-              echo "Creating virtual environment in ./venv"
-              python -m venv venv
-            fi
 
-            # Activate the virtual environment
-            echo "Activating virtual environment"
-            source venv/bin/activate
+          shellHook = ''
+            if [ -z "$NIX_SHELL_NESTED" ]; then
+              export NIX_SHELL_NESTED=1
+              alias ipy="ipython --nosep"
+              alias exit="deactivate && exit"
+              export PS1="🧢 \e[38;5;211m\]g\e[38;5;111mBLP\[\e[0m $PS1"
+              if [ ! -d venv ]; then
+                echo "Creating virtual environment in ./venv"
+                python -m venv venv
+              fi
+              echo "Activating virtual environment"
+              source venv/bin/activate
+            else
+              echo "Nested nix-shell detected, skipping venv creation and activation"
+            fi
           '';
         };
       });

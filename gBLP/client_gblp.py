@@ -118,26 +118,30 @@ class Bbg:
         #self._loop_run_async(self.connect())
         self.streams = []
         self.closing = False
+        self.connected = False
 
 
     def _start_loop_and_wait_done(self):
         asyncio.set_event_loop(self.loop) # start loop
         self.done = asyncio.Event()
-        self.loop.run_until_complete(self._make_channel_and_stub()) # get the channel and caller stub
-        # wait for done event
-        print("Waiting for done event.")
-        self.loop.run_until_complete(self.done.wait())
-        self.loop.run_until_complete(self.channel.close())
-        # ----------------- clean up -----------------
-        while len(self.streams) > 0:
-            logger.info("Cancelling stream")
-            stream = self.streams.pop()
-            console.print(f"[bold gold3]pre: {stream.cancelled()}")
-            if not stream.cancelled():
-                stream.cancel()
-                time.sleep(0.2)
-                console.print(f"[bold magenta]post: {stream.cancelled()}")
-        logger.info("Goodbye.")
+        success = self.loop.run_until_complete(self._make_channel_and_stub()) # get the channel and caller stub
+        if success:
+            self.connected = True
+            # wait for done event
+            print("Waiting for done event.")
+            self.loop.run_until_complete(self.done.wait())
+            print("Finished waiting")
+            self.loop.run_until_complete(self.channel.close())
+            # ----------------- clean up -----------------
+            while len(self.streams) > 0:
+                logger.info("Cancelling stream")
+                stream = self.streams.pop()
+                console.print(f"[bold gold3]pre: {stream.cancelled()}")
+                if not stream.cancelled():
+                    stream.cancel()
+                    time.sleep(0.2)
+                    console.print(f"[bold magenta]post: {stream.cancelled()}")
+            logger.info("Goodbye.")
 
 
     def close(self):
@@ -164,31 +168,38 @@ class Bbg:
         if not ((confdir / "client_certificate.pem").exists() and
                 (confdir / "client_private_key.pem").exists() and
                 (confdir / "ca_certificate.pem").exists()):
-            await self._makeCerts()
+            success = await self._makeCerts()
+            if not success:
+                logger.warning("Failure making certificates")
+                return(0)
 
         # Load client certificate and private key
-        with open(confdir / "client_certificate.pem", "rb") as f:
-            cert = f.read()
-        with open(confdir / "client_private_key.pem", "rb") as f:
-            key = f.read()
-        # Load CA certificate to verify the server
-        with open(confdir / "ca_certificate.pem", "rb") as f:
-            cacert = f.read()
+        try:
+            with open(confdir / "client_certificate.pem", "rb") as f:
+                cert = f.read()
+            with open(confdir / "client_private_key.pem", "rb") as f:
+                key = f.read()
+            # Load CA certificate to verify the server
+            with open(confdir / "ca_certificate.pem", "rb") as f:
+                cacert = f.read()
 
-        # Create SSL credentials for the client
-        client_credentials = grpc.ssl_channel_credentials(
-            root_certificates=cacert,
-            private_key=key,
-            certificate_chain=cert,
-        )
-        hostandport = f"{self.grpchost}:{self.grpcport}"
-        logger.info(f"Connecting to {hostandport}...")
-        self.channel = grpc.aio.secure_channel(hostandport, client_credentials, 
-            options=[
-                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
-            ])
-        self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
+            # Create SSL credentials for the client
+            client_credentials = grpc.ssl_channel_credentials(
+                root_certificates=cacert,
+                private_key=key,
+                certificate_chain=cert,
+            )
+            hostandport = f"{self.grpchost}:{self.grpcport}"
+            logger.info(f"Connecting to {hostandport}...")
+            self.channel = grpc.aio.secure_channel(hostandport, client_credentials, 
+                options=[
+                    ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                    ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+                ])
+            self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
+        except:
+            return(0)
+        return(1)
 
 
     async def _makeCerts(self):
@@ -206,7 +217,7 @@ class Bbg:
                 )
             except grpc.aio.AioRpcError as e:
                 logger.info(f"Error: {e}")
-                return
+                return(0)
             if iresponse.authorised: 
                 confdir.mkdir(parents=True, exist_ok=True)
                 with open(confdir / "client_certificate.pem", "wb") as f:
@@ -216,8 +227,10 @@ class Bbg:
                 with open(confdir / "ca_certificate.pem", "wb") as f:
                     f.write(iresponse.cacert)
                 logger.info(f"Certificates written to {confdir}.")
+                return(1)
             else:
                 logger.warning(f"Authorization denied for reason {iresponse.reason}")
+                return(0)
 
 
     def check_connection_up(self):
@@ -573,20 +586,21 @@ if __name__ == "__main__":
     else:
         data = dict()
         bbg = Bbg()
-
-        cryptosubs = True
-        if cryptosubs:
-            with open("examples/tickers/crypto.json") as jf:
-                cryptos = json.load(jf)["crypto"]
-            handler = HandlerLagWatchBars()
-            subs1 = bbg.mtl(cryptos, DEFAULT_FIELDS, bar=False, interval = 1)
-            #bbg.sub(subs1, handler = handler)
-            bbg.sub(subs1)
-
-
-
-
-        IPython.embed()
-
-
+        print(0)
+        if bbg.connected:
+            cryptosubs = True
+            if cryptosubs:
+                with open("examples/tickers/crypto.json") as jf:
+                    cryptos = json.load(jf)["crypto"]
+                print(1)
+                handler = HandlerLagWatchBars()
+                print(2)
+                subs1 = bbg.mtl(cryptos, DEFAULT_FIELDS, bar=False, interval = 1)
+                print(3)
+                #bbg.sub(subs1, handler = handler)
+                bbg.sub(subs1)
+                print("subbed")
+            IPython.embed()
+        else:
+            print("Could not start Bloomberg class")
 

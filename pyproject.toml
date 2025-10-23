@@ -31,6 +31,7 @@ psutil = "^6.1.0"
 pytest = "^8.3.3"
 twine = "^4.0.2"  
 loguru = "^0.7.0"
+prompt-toolkit = "^30.0.0"
 blpapi = { version = "^3.24.10", source = "bloomberg", markers = "sys_platform == 'win32'" }
 
 [tool.poetry.scripts]
