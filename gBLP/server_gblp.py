@@ -204,15 +204,6 @@ class KeyManager(KeyManagerServicer):
             # This can happen if interrupted
             return None
 
-
-    async def input_timeout(self, prompt, timeout):
-        # Run the blocking input() function in a separate thread
-        try:
-            return await asyncio.wait_for(asyncio.to_thread(input, prompt), 
-                                          timeout=timeout)
-        except asyncio.TimeoutError:
-            return None 
-
     async def requestKey(self, 
                          request: KeyRequestId, 
                          context: grpc.aio.ServicerContext) -> KeyResponse:
