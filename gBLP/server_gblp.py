@@ -31,6 +31,7 @@ import msvcrt
 import time
 import traceback
 from pathlib import Path
+from prompt_toolkit import PromptSession
 import multiprocessing # no more thread leaking from blpapi. Wrap and shut. 
 from multiprocessing import Manager
 from cryptography.hazmat.primitives import serialization, hashes 
@@ -189,6 +190,20 @@ class KeyManager(KeyManagerServicer):
 
     def __init__(self):
         pass
+
+    async def input_timeout(prompt, timeout):
+        session = PromptSession()
+        try:
+            # Prompt with timeout; raises EOFError on timeout
+            result = await asyncio.wait_for(session.prompt_async(prompt), timeout=timeout)
+            return result.strip() if result else None
+        except asyncio.TimeoutError:
+            # Clear the prompt line for a clean exit
+            raise asyncio.TimeoutError("Input timed out")
+        except EOFError:
+            # This can happen if interrupted
+            return None
+
 
     async def input_timeout(self, prompt, timeout):
         # Run the blocking input() function in a separate thread
