@@ -20,7 +20,6 @@ from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
 from gBLP.util.certMaker import get_conf_dir
 from gBLP.util.utils import makeName, printBeta, printLicence
 import getpass
-from loguru import logger
 from collections import deque, defaultdict
 import IPython
 from queue import Queue
@@ -118,19 +117,16 @@ class Bbg:
         #self._loop_run_async(self.connect())
         self.streams = []
         self.closing = False
-        self.connected = False
 
 
     def _start_loop_and_wait_done(self):
         asyncio.set_event_loop(self.loop) # start loop
         self.done = asyncio.Event()
-        success = self.loop.run_until_complete(self._make_channel_and_stub()) # get the channel and caller stub
-        if success:
-            self.connected = True
-            # wait for done event
-            print("Waiting for done event.")
-            self.loop.run_until_complete(self.done.wait())
-            print("Finished waiting")
+        self.loop.run_until_complete(self._make_channel_and_stub()) # get the channel and caller stub
+        # wait for done event
+        print("Waiting for done event.")
+        self.loop.run_until_complete(self.done.wait())
+        if self.connected:   # do all the grpc stuff
             self.loop.run_until_complete(self.channel.close())
             # ----------------- clean up -----------------
             while len(self.streams) > 0:
@@ -140,8 +136,7 @@ class Bbg:
                 if not stream.cancelled():
                     stream.cancel()
                     time.sleep(0.2)
-                    console.print(f"[bold magenta]post: {stream.cancelled()}")
-            logger.info("Goodbye.")
+        logger.info("Goodbye.")
 
 
     def close(self):
@@ -170,36 +165,35 @@ class Bbg:
                 (confdir / "ca_certificate.pem").exists()):
             success = await self._makeCerts()
             if not success:
-                logger.warning("Failure making certificates")
-                return(0)
+                self.close()
+                self.connected = False
+                return
 
         # Load client certificate and private key
-        try:
-            with open(confdir / "client_certificate.pem", "rb") as f:
-                cert = f.read()
-            with open(confdir / "client_private_key.pem", "rb") as f:
-                key = f.read()
-            # Load CA certificate to verify the server
-            with open(confdir / "ca_certificate.pem", "rb") as f:
-                cacert = f.read()
+        with open(confdir / "client_certificate.pem", "rb") as f:
+            cert = f.read()
+        with open(confdir / "client_private_key.pem", "rb") as f:
+            key = f.read()
+        # Load CA certificate to verify the server
+        with open(confdir / "ca_certificate.pem", "rb") as f:
+            cacert = f.read()
 
-            # Create SSL credentials for the client
-            client_credentials = grpc.ssl_channel_credentials(
-                root_certificates=cacert,
-                private_key=key,
-                certificate_chain=cert,
-            )
-            hostandport = f"{self.grpchost}:{self.grpcport}"
-            logger.info(f"Connecting to {hostandport}...")
-            self.channel = grpc.aio.secure_channel(hostandport, client_credentials, 
-                options=[
-                    ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-                    ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
-                ])
-            self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
-        except:
-            return(0)
-        #return(1)
+        # Create SSL credentials for the client
+        client_credentials = grpc.ssl_channel_credentials(
+            root_certificates=cacert,
+            private_key=key,
+            certificate_chain=cert,
+        )
+        hostandport = f"{self.grpchost}:{self.grpcport}"
+        logger.info(f"Connecting to {hostandport}...")
+        self.channel = grpc.aio.secure_channel(hostandport, client_credentials, 
+            options=[
+                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+            ])
+        self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
+        logger.info("connected")
+        self.connected = True
 
 
     async def _makeCerts(self):
@@ -217,7 +211,7 @@ class Bbg:
                 )
             except grpc.aio.AioRpcError as e:
                 logger.info(f"Error: {e}")
-                return(0)
+                return(False)
             if iresponse.authorised: 
                 confdir.mkdir(parents=True, exist_ok=True)
                 with open(confdir / "client_certificate.pem", "wb") as f:
@@ -227,10 +221,10 @@ class Bbg:
                 with open(confdir / "ca_certificate.pem", "wb") as f:
                     f.write(iresponse.cacert)
                 logger.info(f"Certificates written to {confdir}.")
-                return(1)
+                return(True)
             else:
                 logger.warning(f"Authorization denied for reason {iresponse.reason}")
-                return(0)
+                return(False)
 
 
     def check_connection_up(self):
@@ -238,6 +232,7 @@ class Bbg:
         state = self.channel.get_state()
         return(state != grpc.ChannelConnectivity.SHUTDOWN \
             and state != grpc.ChannelConnectivity.TRANSIENT_FAILURE)
+
 
 
 
@@ -586,21 +581,21 @@ if __name__ == "__main__":
     else:
         data = dict()
         bbg = Bbg()
-        print(0)
+        while not hasattr(bbg, "connected"):
+            time.sleep(0.2)
         if bbg.connected:
+            print(0)
             cryptosubs = True
+            print(1)
             if cryptosubs:
                 with open("examples/tickers/crypto.json") as jf:
                     cryptos = json.load(jf)["crypto"]
-                print(1)
                 handler = HandlerLagWatchBars()
-                print(2)
                 subs1 = bbg.mtl(cryptos, DEFAULT_FIELDS, bar=False, interval = 1)
-                print(3)
                 #bbg.sub(subs1, handler = handler)
                 bbg.sub(subs1)
                 print("subbed")
             IPython.embed()
         else:
-            print("Could not start Bloomberg class")
+            print("didn't connect")
 
