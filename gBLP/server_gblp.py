@@ -198,8 +198,8 @@ class KeyManager(KeyManagerServicer):
             result = await asyncio.wait_for(session.prompt_async(prompt), timeout=timeout)
             return result.strip() if result else None
         except asyncio.TimeoutError:
-            # Clear the prompt line for a clean exit
-            raise asyncio.TimeoutError("Input timed out")
+            logger.info("Input timed out")
+            return None
         except EOFError:
             # This can happen if interrupted
             return None
