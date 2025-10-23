@@ -1,4 +1,5 @@
-# colorscheme aiseered dark
+# colorscheme revolutions dark
+
 
 # ---------------------------- gBLP LICENCE ---------------------------------
 # Licensed under the GNU General Public License, Version 3.0 (the "License");
@@ -38,12 +39,16 @@ from gBLP.constants import (
 # TODO FIRST RELEASE
 # * client open and close explicitly instead of on instantiation
 # * unsubscribe on cancel error in Session class
+# * server correlators must show who is correlating
 # * write tests
 # * write examples
 # * write documentation
+# * overrides
+# * put colours into logger and upgrade to loguru
 # TODO FROLLOW UP RELEASE
 # * session reconnection with resubscription
 # * check UTC status (recall reference data request must have UTC TRUE specified)
+# * comq and process per client
 # * curve data request
 # * intraday tick request
 # * instrument search request
@@ -118,30 +123,26 @@ class Bbg:
         #self._loop_run_async(self.connect())
         self.streams = []
         self.closing = False
-        self.connected = False
 
 
     def _start_loop_and_wait_done(self):
         asyncio.set_event_loop(self.loop) # start loop
         self.done = asyncio.Event()
-        success = self.loop.run_until_complete(self._make_channel_and_stub()) # get the channel and caller stub
-        if success:
-            self.connected = True
-            # wait for done event
-            print("Waiting for done event.")
-            self.loop.run_until_complete(self.done.wait())
-            print("Finished waiting")
-            self.loop.run_until_complete(self.channel.close())
-            # ----------------- clean up -----------------
-            while len(self.streams) > 0:
-                logger.info("Cancelling stream")
-                stream = self.streams.pop()
-                console.print(f"[bold gold3]pre: {stream.cancelled()}")
-                if not stream.cancelled():
-                    stream.cancel()
-                    time.sleep(0.2)
-                    console.print(f"[bold magenta]post: {stream.cancelled()}")
-            logger.info("Goodbye.")
+        self.loop.run_until_complete(self._make_channel_and_stub()) # get the channel and caller stub
+        # wait for done event
+        print("Waiting for done event.")
+        self.loop.run_until_complete(self.done.wait())
+        self.loop.run_until_complete(self.channel.close())
+        # ----------------- clean up -----------------
+        while len(self.streams) > 0:
+            logger.info("Cancelling stream")
+            stream = self.streams.pop()
+            console.print(f"[bold gold3]pre: {stream.cancelled()}")
+            if not stream.cancelled():
+                stream.cancel()
+                time.sleep(0.2)
+                console.print(f"[bold magenta]post: {stream.cancelled()}")
+        logger.info("Goodbye.")
 
 
     def close(self):
@@ -168,38 +169,31 @@ class Bbg:
         if not ((confdir / "client_certificate.pem").exists() and
                 (confdir / "client_private_key.pem").exists() and
                 (confdir / "ca_certificate.pem").exists()):
-            success = await self._makeCerts()
-            if not success:
-                logger.warning("Failure making certificates")
-                return(0)
+            await self._makeCerts()
 
         # Load client certificate and private key
-        try:
-            with open(confdir / "client_certificate.pem", "rb") as f:
-                cert = f.read()
-            with open(confdir / "client_private_key.pem", "rb") as f:
-                key = f.read()
-            # Load CA certificate to verify the server
-            with open(confdir / "ca_certificate.pem", "rb") as f:
-                cacert = f.read()
+        with open(confdir / "client_certificate.pem", "rb") as f:
+            cert = f.read()
+        with open(confdir / "client_private_key.pem", "rb") as f:
+            key = f.read()
+        # Load CA certificate to verify the server
+        with open(confdir / "ca_certificate.pem", "rb") as f:
+            cacert = f.read()
 
-            # Create SSL credentials for the client
-            client_credentials = grpc.ssl_channel_credentials(
-                root_certificates=cacert,
-                private_key=key,
-                certificate_chain=cert,
-            )
-            hostandport = f"{self.grpchost}:{self.grpcport}"
-            logger.info(f"Connecting to {hostandport}...")
-            self.channel = grpc.aio.secure_channel(hostandport, client_credentials, 
-                options=[
-                    ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-                    ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
-                ])
-            self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
-        except:
-            return(0)
-        #return(1)
+        # Create SSL credentials for the client
+        client_credentials = grpc.ssl_channel_credentials(
+            root_certificates=cacert,
+            private_key=key,
+            certificate_chain=cert,
+        )
+        hostandport = f"{self.grpchost}:{self.grpcport}"
+        logger.info(f"Connecting to {hostandport}...")
+        self.channel = grpc.aio.secure_channel(hostandport, client_credentials, 
+            options=[
+                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+            ])
+        self.stub = bloomberg_pb2_grpc.BbgStub(self.channel)
 
 
     async def _makeCerts(self):
@@ -217,7 +211,7 @@ class Bbg:
                 )
             except grpc.aio.AioRpcError as e:
                 logger.info(f"Error: {e}")
-                return(0)
+                return
             if iresponse.authorised: 
                 confdir.mkdir(parents=True, exist_ok=True)
                 with open(confdir / "client_certificate.pem", "wb") as f:
@@ -227,10 +221,8 @@ class Bbg:
                 with open(confdir / "ca_certificate.pem", "wb") as f:
                     f.write(iresponse.cacert)
                 logger.info(f"Certificates written to {confdir}.")
-                return(1)
             else:
                 logger.warning(f"Authorization denied for reason {iresponse.reason}")
-                return(0)
 
 
     def check_connection_up(self):
@@ -241,46 +233,24 @@ class Bbg:
 
 
 
+
     def historicalDataRequest(self, 
                               topics, 
-                              fields,
+                              fields = None,
                               start = None,
                               end = None, 
-                              options = None, 
-                              overrides = None) -> bloomberg_pb2.HistoricalDataResponse:
+                              options = None) -> bloomberg_pb2.HistoricalDataResponse:
         if not type(topics) == list and all(isinstance(topic, str) for topic in topics):
             logger.error("Topics must be a list of strings.")
             return  
-        if not type(fields) == list and all(isinstance(field, str) for field in fields):
-            logger.error("Fields must be a list of strings.")
-            return
-        if type(start) == dt.datetime or type(start) == dt.date:
-            newstart = protoTimestamp() 
-            newstart.FromDatetime(dt.datetime.combine(start, dt.time.min)) #ensure minutes
-            start = newstart
-        if type(end) == dt.datetime or type(end) == dt.date:
-            newend = protoTimestamp() 
-            newend.FromDatetime(dt.datetime.combine(end, dt.time.min)) # ensure minutes
-            end = newend
-        if overrides:
-            if not type(overrides) == dict:
-                logger.error("Overrides must be a dict.")
-                return
-        if options:
-            if not type(options) == dict:
-                logger.error("Options must be a dict.")
-                return
-
-
-        return self._loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options, overrides))
+        return self._loop_run_async(self.async_historicalDataRequest(topics, fields, start, end, options))
 
     async def async_historicalDataRequest(self, 
                                           topics, 
                                           fields, 
                                           start, 
                                           end, 
-                                          options, 
-                                          overrides) -> bloomberg_pb2.HistoricalDataResponse:
+                                          options) -> bloomberg_pb2.HistoricalDataResponse:
         args = {k: v for k, v in locals().items() if v is not None and k != "self"}
         hreq = bloomberg_pb2.HistoricalDataRequest(**args)
         logger.info(f"Requesting historical data: {hreq}")
@@ -296,21 +266,9 @@ class Bbg:
                            end = None,  # defaults on server side
                            interval = None, # defaults on server side
                            options = None) -> bloomberg_pb2.IntradayBarResponse:
-        if type(start) == dt.datetime or type(start) == dt.date:
-            newstart = protoTimestamp() 
-            newstart.FromDatetime(dt.datetime.combine(start, dt.time.min)) #ensure minutes
-            start = newstart
-        if type(end) == dt.datetime or type(end) == dt.date:
-            newend = protoTimestamp() 
-            newend.FromDatetime(dt.datetime.combine(end, dt.time.min)) # ensure minutes
-            end = newend
         if not type(topic) == str:
             logger.error("Topic must be a string.")
             return
-        if options:
-            if not type(options) == dict:
-                logger.error("Options must be a dict.")
-                return
         return self._loop_run_async(self.async_intradayBarRequest(topic, start, end, interval, options))
 
     async def async_intradayBarRequest(self, 
@@ -327,11 +285,9 @@ class Bbg:
         return data
 
 
-
     def referenceDataRequest(self,
                              topics,
                              fields,
-                             options = None,
                              overrides = None) -> bloomberg_pb2.ReferenceDataResponse:
 
         if not type(topics) == list:
@@ -340,26 +296,15 @@ class Bbg:
         if not type(fields) == list:
             logger.error("Fields must be a list.")
             return
-        if overrides:
-            if not type(overrides) == dict:
-                logger.error("Overrides must be a dict.")
-                return
-        if options:
-            if not type(options) == dict:
-                logger.error("Options must be a dict.")
-                return
-
-        return self._loop_run_async(self.async_referenceDataRequest(topics, fields, options, overrides))
+        return self._loop_run_async(self.async_referenceDataRequest(topics, fields, overrides))
 
     async def async_referenceDataRequest(self,
                                          topics,
                                          fields,
-                                         options = None,
-                                         overrides = None) -> bloomberg_pb2.ReferenceDataResponse:
+                                         overrides) -> bloomberg_pb2.ReferenceDataResponse:
         refreq = bloomberg_pb2.ReferenceDataRequest(
             topics=topics,
             fields=fields,
-            options=options,
             overrides=overrides
         )
         logger.info(f"Requesting reference data: {refreq}")
@@ -465,15 +410,6 @@ class Bbg:
 
     async def async_subscriptionInfo(self):
         response = await self.stub.subscriptionInfo(empty_pb2.Empty(), metadata=[("client", self.name)])
-        return response
-
-
-    def servicesInfoRequest(self) -> bloomberg_pb2.ServicesInfoResponse:
-        response = self._loop_run_async(self.async_servicesInfoRequest())
-        return response
-
-    async def async_servicesInfoRequest(self) -> bloomberg_pb2.ServicesInfoResponse:
-        response = await self.stub.servicesInfoRequest(empty_pb2.Empty(), metadata=[("client", self.name)])
         return response
 
 
@@ -586,21 +522,18 @@ if __name__ == "__main__":
     else:
         data = dict()
         bbg = Bbg()
-        print(0)
-        if bbg.connected:
-            cryptosubs = True
-            if cryptosubs:
-                with open("examples/tickers/crypto.json") as jf:
-                    cryptos = json.load(jf)["crypto"]
-                print(1)
-                handler = HandlerLagWatchBars()
-                print(2)
-                subs1 = bbg.mtl(cryptos, DEFAULT_FIELDS, bar=False, interval = 1)
-                print(3)
-                #bbg.sub(subs1, handler = handler)
-                bbg.sub(subs1)
-                print("subbed")
-            IPython.embed()
-        else:
-            print("Could not start Bloomberg class")
+
+        cryptosubs = True
+        if cryptosubs:
+            with open("examples/tickers/crypto.json") as jf:
+                cryptos = json.load(jf)["crypto"]
+            handler = HandlerLagWatchBars()
+            subs1 = bbg.mtl(cryptos, DEFAULT_FIELDS, bar=False, interval = 1)
+            #bbg.sub(subs1, handler = handler)
+            bbg.sub(subs1)
+
+        IPython.embed()
+
+
+
 

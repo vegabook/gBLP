@@ -664,6 +664,21 @@ class SessionRunner(BbgServicer):
         return empty_pb2.Empty()
 
 
+    async def serviceInfo(self):
+        """ get the service info """
+        for service in self.servicesAvail.keys():
+            try:
+                console.print(f"[bold blue]Service {service}")
+                succes, req = self._createEmptyRequest(service)
+                info = req.asElement().elementDefinition()
+                console.print(f"[bold orange1]{dir(info)}") 
+                print(info.toString())
+            except Exception as e:
+                logger.error(f"Error in service info: {e}")
+                # print full trace
+                traceback.print_exc()
+
+
 
     async def listenComq(self):
         """Listen for messages from the grpc handler. This will also close
