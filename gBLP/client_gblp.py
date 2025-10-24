@@ -116,7 +116,7 @@ class Bbg:
         # Run asynchronous initialization in the event loop
         #self._loop_run_async(self.connect())
         self.streams = []
-        self.closing = False
+        self.closed = False
 
 
     def _start_loop_and_wait_done(self):
@@ -140,9 +140,11 @@ class Bbg:
 
 
     def close(self):
-        if not self.closing:
-            self.closing = True
+        if not self.closed:
+            self.closed = True
             self.loop.call_soon_threadsafe(self.done.set)
+        else:
+            logger.info("Already closed")
 
         
     def _loop_run_async(self, coro):
