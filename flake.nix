@@ -3,7 +3,7 @@
 
   # Flake inputs
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs"; # also valid: "nixpkgs"
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
   };
 
   # Flake outputs
@@ -47,7 +47,7 @@
             ruff
             poetry
             grpc-tools
-            openssl_3_3
+            openssl_3
             certstrap
           ];
 
