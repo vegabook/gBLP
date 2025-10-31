@@ -802,7 +802,8 @@ class Bbg(BbgServicer):
                                   context: grpc.aio.ServicerContext) -> IntradayBarResponse:
         clientid = self._makeClientId(context)
         logger.info(f"Received intraday bar request {str(request.topic)} from {clientid}")
-        result = await self.stub.intradayBarRequest(request)
+        logger.info("with deadline!!")
+        result = await self.stub.intradayBarRequest(request, timeout = 60)
         return result
 
 
