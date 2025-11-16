@@ -64,7 +64,7 @@ Make sure your Bloomberg Terminal is running, and logged in.
 where `<server_ip_or_hostname>` is what you specified when generating the certificates on a machine with a Bloomberg Terminal.
 
 #### Python client
-Make sure the server is up and running, that you a reachable IP or hostname, and that you have done the `--gencerts` on the server.  
+Make sure the server is up and running, that you have a reachable IP or hostname, and that you have done the `--gencerts` on the server.  
 An example python client is provided in `client_gBLP.py` but this is not packaged, so you will have to modify it yourself if you want to use it in your apps, although this client does drop you into iPython so it should be easy to convert to notebooks etc.  Or you can use the class workflow. 
 ```
 cd gBLP\gBLP
@@ -93,9 +93,7 @@ All in class `Bbg`:
 * `sub`
 * `unsub`
 * `subscriptionsInfo`
-Note that `sub` is a _live_ subscription. `bbg.sub(["XBTUSD Curncy"])` will populate the `bbg.subsdata` decque continuously.  
-You may specify your own handler. See the examples. 
-
+  
 ## Licence
 #### Bloomberg
 Please see the [licence](https://github.com/vegabook/gBLP/blob/main/src/bbg_copyright.txt) for the Bloomberg API code contained in this package. 
