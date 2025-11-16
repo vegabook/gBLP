@@ -52,12 +52,8 @@ Later you can `server_gblp --delcerts` to remove the certificates, or `--gencert
 Done. You can now run the server and client.  
 
 ## Installation of Python client on Win/MacOs/Linux
-clone repo.   
-install [uv](https://docs.astral.sh/uv/getting-started/installation/)  
 `git clone https://github.com/vegabook/gBLP`
-`cd gBLP/gBLP`  
-`python -m pip install poetry` of if you're on nix, `nix develop`  
-`poetry build`
+install [uv](https://docs.astral.sh/uv/getting-started/installation/)  
 
 ## Usage
 #### Server (Windows)
@@ -72,6 +68,8 @@ An example python client is provided in `client_gBLP.py` but this is not package
 cd gBLP\gBLP
 uv run client_gBLP.py --grpchost <server_ip_or_hostname>
 ```
+This will download some historical data for you and start a few subscriptions which you can query using `blp.subsdata` decque.  
+  
 Alternatively you can import the `Bbg` class, after ensuring file `client_gblp` is in scope.   
 `from client_gblp import Bbg`  
 `bbg = Bbg("<server_ip_or_hostname>")`  
