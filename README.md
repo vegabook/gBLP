@@ -15,7 +15,7 @@ A gRPC server that wraps the Bloomberg V3 API.
 
 
 ## Why?
-* Finally you're not limited to Windows and Python for developing using the Bloomberg API.  Even Terminal users can [WS]Linux (or VM) and use any programming language they want that supports Google's excellent [gRPC](https://grpc.io/) library.  
+* Finally you're not limited to Windows and Python for developing using the Bloomberg API.  Even Terminal users can [WS]Linux (or VM) and use any programming language they want that supports Google's excellent gRPC library.  
 * Streaming: a fully featured subscription API that operates in a separate thread in python, and uses idiomatic gRPC streams in other programming languages. 
 * Most used historical data functions are implemented. 
 * Multi-language: gRPC allows you to use the same API in any language that supports it. 
