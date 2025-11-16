@@ -15,10 +15,10 @@ A gRPC server that wraps the Bloomberg V3 API.
 
 
 ## Why?
-* Streaming: a fully featured subscription API that operates in a separate thread, allowing REPL or Jupyter interactivity.
+* Streaming: a fully featured subscription API that operates in a separate thread in python, and uses idiomatic gRPC streams in other programming langauges. 
+* Most used historical data functions are implemented. 
 * Multi-language: gRPC allows you to use the same API in any language that supports it. 
 * Blpapi on Linux, MacOS, or Windows (see the licence).
-* Robust gRPC based API mapping with almost total coverage of the Bloomberg API. 
 
 ## Clients
 * Python: an example python workflow is shown in `client_gblp.py` (see below)  
@@ -32,6 +32,7 @@ A gRPC server that wraps the Bloomberg V3 API.
 * ReferenceDataRequest. Information on any security. 
 
 ## Not yet
+This functionality is deemed of secondary importance and is not yet implemented. 
 * IntradayTickRequest
 * instrumentListRequest
 * curveListRequest
@@ -71,6 +72,14 @@ An example python client is provided in `client_gBLP.py` but this is not package
 cd gBLP\gBLP
 uv run client_gBLP.py --grpchost <server_ip_or_hostname>
 ```
+Alternatively you can import the `Bbg` class, after ensuring file `client_gblp` is in scope. 
+`from client_gblp import Bbg`
+`bbg = Bbg("<server_ip_or_hostname>")`
+`bbg.historicalDataRequest(["USDZAR Curncy", "SPX Index"], ["LAST_PRICE"])`
+`bbg.intradayBarRequest("GBPUSD Curncy", start = dt.datetime.now() - dt.timedelta(days = 90), end = dt.datetime.now, interval = 1)`. Also takes an options parameter see the bloomberg api [docs](https://data.bloomberglp.com/professional/sites/10/2017/03/BLPAPI-Core-Developer-Guide.pdf)  
+`bbg.referenceDataRequest(["SPX Index", "CAC Index"], ["CUR_MKT_CAP", "INDX_MEMBERS"])`
+subscribe using `bbg.sub(["EURUSD Curncy", "XBTUSD Curncy"])` which will run a background subscription process. You can query the data decque through `bbg.subsdata`.  
+
 Note that the client is threaded and will continue to allow you to use python/IPython while it runs. 
 When you're done, `bbg.close()` will close the connection and clean up server side. Once closed, you cannot use the client again without reinstating it. 
 

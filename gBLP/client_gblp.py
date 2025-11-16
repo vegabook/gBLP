@@ -52,20 +52,6 @@ from constants import (
 ALL_FIELDS = bloomberg_pb2.allBbgFields.keys()
 
 import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument("--grpchost", 
-    help="Host for data and key requests.")
-parser.add_argument("--grpcport", default="50051", 
-    help="Port for data requests.")
-parser.add_argument("--grpckeyport", default="50052", 
-    help="Port for key requests.")
-parser.add_argument("--delcerts", action="store_true", default=False, 
-    help="Delete certificates.")
-parser.add_argument("--nobetawarn", action="store_true", default=False, 
-    help="Do not show beta warning.")
-parser.add_argument("--nodetails", action="store_true", default=False, 
-    help="Do not use IP address, username, or operating system type in the client id string.")
-args = parser.parse_args()
 username = getpass.getuser()
 
 from loguru import logger
@@ -81,12 +67,13 @@ def delCerts():
 
 class Bbg:
     def __init__(self,
-                 name=None,
-                 grpchost=args.grpchost,
-                 grpcport=args.grpcport,
-                 grpckeyport=args.grpckeyport,
+                 grpchost,
+                 grpcport = 50051,
+                 grpckeyport = 50052,
                  maxdDequeSize = 10000, 
-                 nobetawarn = args.nobetawarn):       # max size of deques each holding one topic
+                 nobetawarn = False,
+                 nodetails = False, 
+                 name = None):    
         if not nobetawarn:
             printBeta()
             printLicence()
@@ -99,7 +86,7 @@ class Bbg:
             self.name = name
         else:
             self.name = makeName(alphaLength=6, digitLength=3, 
-                                 alsoUserDetails = not args.nodetails)
+                                 alsoUserDetails = not nodetails)
         self.grpchost = grpchost
         self.grpcport = grpcport
         self.grpckeyport = grpckeyport
@@ -578,12 +565,32 @@ class HandlerPrintnum():
 
 if __name__ == "__main__":
 
-    # TODO move certs into another class
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--grpchost", 
+        help="Host for data and key requests.")
+    parser.add_argument("--grpcport", default="50051", 
+        help="Port for data requests.")
+    parser.add_argument("--grpckeyport", default="50052", 
+        help="Port for key requests.")
+    parser.add_argument("--delcerts", action="store_true", default=False, 
+        help="Delete certificates.")
+    parser.add_argument("--nobetawarn", action="store_true", default=False, 
+        help="Do not show beta warning.")
+    parser.add_argument("--nodetails", action="store_true", default=False, 
+        help="Do not use IP address, username, or operating system type in the client id string.")
+    args = parser.parse_args()
+        
     if args.delcerts:
         delCerts()
     else:
         data = dict()
-        bbg = Bbg()
+        bbg = Bbg(grpchost = args.grpchost,
+                  grpcport = args.grpcport,
+                  grpckeyport = args.grpckeyport,
+                  nobetawarn = args.nobetawarn,
+                  nodetails = args.nodetails, 
+                  name = None)
+
         while not hasattr(bbg, "connected"):
             time.sleep(0.2)
         if bbg.connected:
