@@ -1,0 +1,7 @@
+# constants for message types from the bbg terminal
+MAX_MESSAGE_LENGTH = 50 * 1024 * 1024
+
+PONG_SECONDS_TIMEOUT = 5
+
+DEFAULT_FIELDS = ["LAST_PRICE", "LAST_PRICE_TIME_TODAY_REALTIME", "IS_DELAYED_STREAM"]
+

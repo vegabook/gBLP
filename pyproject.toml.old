@@ -1,0 +1,53 @@
+[tool.poetry]
+name = "gblp"
+version = "0.1.1"
+description = "A project for working with Bloomberg and gRPC"
+authors = ["Thomas Browne"]
+license = "GPL-3.0-or-later"
+readme = "README.md"
+packages = [{ include = "gBLP" }]
+keywords = ["gRPC", "Bloomberg", "Python"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent"
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+grpcio = "^1.68.0"
+grpcio-tools = "^1.68.0"
+ipython = "^8.29.0"
+certifi = "^2024.8.30"
+cryptography = "^43.0.3"
+rich = "^13.9.4"
+numpy = "^2.1.3"
+pandas = "^2.2.3"
+polars = "^1.14.0"
+psutil = "^6.1.0"
+pytest = "^8.3.3"
+twine = "^4.0.2"  
+loguru = "^0.7.0"
+prompt-toolkit = "^3.0.0"
+blpapi = { version = "^3.24.10", source = "bloomberg", markers = "sys_platform == 'win32'" }
+
+[tool.poetry.scripts]
+gblp_server = "gBLP.server_gblp:main"
+gblp-server = "gBLP.server_gblp:main"
+gblp_serve = "gBLP.serve_gblp:main"
+gblp-serve = "gBLP.serve_gblp:main"
+
+[[tool.poetry.source]]
+name = "bloomberg"
+url = "https://blpapi.bloomberg.com/repository/releases/python/simple/"
+
+[poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+
+[build-system]
+requires = ["poetry-core>=1.5.0", "setuptools>=42", "wheel"]
+build-backend = "poetry.core.masonry.api"
+

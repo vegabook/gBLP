@@ -1,0 +1,478 @@
+// colorscheme retrobox light
+
+syntax = "proto3";
+
+package bloomberg;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+//import "google/protobuf/any.proto";
+//import "google/protobuf/wrappers.proto";
+import "google/protobuf/empty.proto";
+
+// Key management
+service KeyManager {
+  rpc requestKey (KeyRequestId) returns (KeyResponse) {}
+}
+
+// Bloomberg API session management
+service Bbg {
+  rpc sub(TopicList) returns (stream Topic) {} 
+  rpc unsub(TopicList) returns (google.protobuf.Empty) {}
+  rpc subscriptionInfo(google.protobuf.Empty) returns (TopicList) {}
+  rpc historicalDataRequest(HistoricalDataRequest) returns (HistoricalDataResponse) {}
+  //rpc intradayTickRequest. maybe "tick" or "gblpTick"
+  rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
+  rpc referenceDataRequest(ReferenceDataRequest) returns (ReferenceDataResponse) {}
+  rpc servicesInfoRequest(google.protobuf.Empty) returns (ServicesInfoResponse) {}
+  rpc ping(Ping) returns (Pong) {}
+}
+
+/////////////// Subscription /////////////////
+
+enum topicType {
+  NONE = 0;
+  TICKER = 1;
+  SEDOL1 = 2;
+  CUSIP = 3;
+}
+
+enum subscriptionType {
+  ANY = 0;
+  TICK = 1;
+  BAR = 2;
+}
+
+message FieldVal {
+  string name = 1;
+  google.protobuf.Value val = 2;
+  string valtype = 3;
+}
+
+
+enum barType {
+  OTHER = 0;
+  MARKETBARUPDATE = 1;
+  MARKETBARSTART = 2;
+  MARKETBAREND = 3;
+  MARKETBARINTERVALEND = 4;
+}
+
+
+message FieldVals {
+  repeated FieldVal vals = 1;
+  google.protobuf.Timestamp servertimestamp = 2;
+}
+
+message BarVals {
+  float open = 1;
+  float high = 2;
+  float low = 3;
+  float close = 4;
+  int32 volume = 5;
+  int32 numEvents = 6;
+  float value = 7;
+  google.protobuf.Timestamp timestamp = 8;
+  google.protobuf.Timestamp servertimestamp = 9;
+  barType bartype = 10;
+}
+
+message Status {
+  statusType statustype = 1;
+  google.protobuf.Timestamp servertimestamp = 2;
+  string jsondetails = 3;
+}
+
+message Topic {
+  string topic = 1;
+  topicType topictype = 2; 
+  subscriptionType subtype = 3;
+  int32 interval = 4;
+  repeated string fields = 5;
+  oneof data {
+    FieldVals fieldvals = 6;
+    BarVals barvals = 7;
+    Status status = 8;
+  }
+}
+
+
+message TopicList {
+  string tlid = 1;
+  repeated Topic topics = 2;
+}
+
+
+
+/////////////// Reference data //////////////////
+
+//see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p164
+
+message ReferenceDataRequest {
+  repeated string topics = 1; // securities
+  repeated string fields = 2; // fields list
+  map <string, string> options = 3; // overrides
+  map <string, string> overrides = 4; // overrides
+}
+
+
+message ReferenceDataResponse {
+  ErrorInfo responseError = 1;
+  repeated SecurityData securityData = 2;
+}
+
+
+////////////////////////// Common to all calls //////////////////////////
+
+// Top-level message containing all security data
+message Response {
+    repeated SecurityData securityData = 1;
+}
+
+// Represents data for each security
+message SecurityData {
+    string security = 1;
+    repeated EIDData eidData = 2;
+    repeated FieldException fieldExceptions = 3;
+    int32 sequenceNumber = 4;
+    FieldData fieldData = 5;
+    repeated FieldData timeData = 6;
+    ErrorInfo securityError = 7;
+}
+
+// Placeholder for EIDData (empty since no data provided)
+message EIDData {}
+
+// Represents exceptions for fields
+message FieldException {
+    string fieldId = 1;
+    ErrorInfo errorInfo = 2;
+}
+
+// Detailed error information
+message ErrorInfo {
+    string source = 1;
+    int32 code = 2;
+    string category = 3;
+    string message = 4;
+    string subcategory = 5;
+}
+
+// Field data with flexible value types
+message FieldData {
+    map<string, Value> fields = 1;
+}
+
+// Represents a value that can be of multiple types
+message Value {
+    oneof kind {
+        double doublevalue = 1;
+        int64 intvalue = 2;
+        string stringvalue = 3;
+        MapValue mapvalue = 4;
+        ListValue listvalue = 5;
+  	google.protobuf.Timestamp timevalue = 6;
+    }
+}
+
+// For nested map values
+message MapValue {
+    map<string, Value> fields = 1;
+}
+
+// For lists of values
+message ListValue {
+    repeated Value values = 1;
+}
+
+/////////////// IntradayBar data //////////////////
+
+//see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p177
+
+message IntradayBarRequest {
+  string topic = 2; // securities
+  google.protobuf.Timestamp start = 3; // startDate
+  google.protobuf.Timestamp end = 4; // endDate
+  int32 interval = 5; // interval in minutes
+  map <string, string> options = 6; 
+}	
+
+message IntradayBarResponse {
+  ErrorInfo responseError = 1;
+  repeated IntradayBarData bars = 2;
+}
+
+message IntradayBarData {	
+  float open = 1;
+  float high = 2;
+  float low = 3;
+  float close = 4;
+  int32 volume = 5;
+  int32 numEvents = 6;
+  float value = 7;
+  google.protobuf.Timestamp time = 8;
+}
+
+
+/////////////// Historical data //////////////////
+
+//see https://data.bloomberglp.com/professional/sites/4/blpapi-developers-guide-2.54.pdf p170
+
+message HistoricalDataRequest {
+  repeated string topics = 2; // securities
+  repeated string fields = 3; // fields list
+  google.protobuf.Timestamp start = 4; // startDate
+  google.protobuf.Timestamp end = 5; // endDate
+  map <string, string> options = 6; // overrides
+  map <string, string> overrides = 7; // overrides
+}
+
+
+// The top-level response message
+message HistoricalDataResponse {
+    // An array of items, each containing security data
+    ErrorInfo responseError = 1;
+    repeated SecurityData securityData = 2;
+}
+
+
+/////////////// Service Information //////////////////
+
+message ServicesInfoRequest {
+  string id = 1;
+}
+
+message ServicesInfoResponse {
+  repeated ServiceInfo services = 1;
+}
+
+message ServiceInfo {
+  string serviceName = 1;
+  string serviceDescription = 2;
+}
+
+/////////////// Key management //////////////////
+
+message KeyRequestId {
+  string id = 1;
+}
+
+message KeyResponse {
+  bytes key = 1;
+  bytes cert = 2;
+  bytes cacert = 3;
+  bool authorised = 4;
+  string reason = 5;
+}
+
+
+/////////////// PingPong /////////////////
+
+message Ping {
+  string message = 1;
+}
+
+message Pong {
+  string message = 1;
+}
+
+///////////// constants //////////////////
+
+enum allBbgFields {
+    MKTDATA_EVENT_TYPE = 0;
+    MKTDATA_EVENT_SUBTYPE = 1;
+    API_RULES_VERSION = 2;
+    LAST_PRICE_ALL_SESSION_DIR_RT = 3;
+    SIMP_LAST_PX_ALL_SESS_DIR_RT = 4;
+    PX_OPEN_ALL_WITH_SWITCHOVER_RT = 5;
+    PX_CLOSE_ALL_WITH_SWITCHOVER_RT = 6;
+    CURRENT_SESSION_RT = 7;
+    CHG_NET_MTD_RT = 8;
+    CHG_PCT_MTD_RT = 9;
+    CHG_NET_QTD_RT = 10;
+    CHG_PCT_QTD_RT = 11;
+    CHG_NET_YTD_RT = 12;
+    CHG_PCT_YTD_RT = 13;
+    CHG_NET_1M_RT = 14;
+    CHG_PCT_1M_RT = 15;
+    CHG_NET_3M_RT = 16;
+    CHG_PCT_3M_RT = 17;
+    REALTIME_2_DAY_CHANGE_NET = 18;
+    REALTIME_2_DAY_CHANGE_PERCENT = 19;
+    REALTIME_5_DAY_CHANGE_NET = 20;
+    REALTIME_5_DAY_CHANGE_PERCENT = 21;
+    RT_PX_AS_PCT_INTRADAY_RANGE = 22;
+    REALTIME_PERCENT_BID_ASK_SPREAD = 23;
+    CHG_NET_1D_ALL_FROM_REGULAR_RT = 24;
+    CHG_PCT_1D_ALL_FROM_REGULAR_RT = 25;
+    PX_CHG_NET_1D_ALL_SWITCHOVER_RT = 26;
+    PX_CHG_PCT_1D_ALL_SWITCHOVER_RT = 27;
+    CHG_NET_REG_SES_PRV_RG_SES_CL_RT = 28;
+    CHG_PCT_REG_SES_PRV_RG_SES_CL_RT = 29;
+    SMART_FIELDS_METADATA_VERSION_RT = 30;
+    IS_DELAYED_STREAM = 31;
+    ID_BB_SEC_NUM_SRC = 32;
+    BID = 34;
+    ASK = 35;
+    HIGH = 36;
+    LOW = 37;
+    BEST_BID = 38;
+    BEST_ASK = 39;
+    MID = 40;
+    OPEN = 41;
+    RT_EXCH_MARKET_STATUS = 42;
+    LAST_ALL_SESSIONS = 43;
+    PREV_CLOSE_VALUE_REALTIME = 44;
+    BID_ALL_SESSION = 45;
+    ASK_ALL_SESSION = 46;
+    TRADING_DT_REALTIME = 47;
+    PREV_TRADING_DT_REALTIME = 48;
+    BB_STANDARD_CC_AVAIL_RT = 49;
+    PRICE_CHANGE_1Y_NET_RT = 50;
+    PRICE_CHANGE_1Y_PCT_RT = 51;
+    CLOSING_PRICE_1Y_AGO_RT = 52;
+    NUM_TRADES_RT = 53;
+    ZERO_BID_PRICE_INDICATOR_RT = 54;
+    ZERO_ASK_PRICE_INDICATOR_RT = 55;
+    SHORTENED_BID_ASK_RT = 56;
+    PX_LOW_BID_RT = 57;
+    PX_HIGH_ASK_RT = 58;
+    PX_HIGH_BID_RT = 59;
+    PX_LOW_ASK_RT = 60;
+    RT_API_MACHINE = 61;
+    ALL_PRICE = 62;
+    MID_TDY = 63;
+    MID2 = 64;
+    MID_DIR = 65;
+    IND_BID_FLAG = 66;
+    IND_ASK_FLAG = 67;
+    OPEN_TDY = 68;
+    LAST_PRICE_TDY = 69;
+    BID_TDY = 70;
+    ASK_TDY = 71;
+    HIGH_TDY = 72;
+    LOW_TDY = 73;
+    LAST2_TRADE = 74;
+    BID_DIR = 75;
+    ASK_DIR = 76;
+    BID2 = 77;
+    ASK2 = 78;
+    RT_PRICING_SOURCE = 79;
+    ASK_CHANGE = 80;
+    BID_CHANGE = 81;
+    SPREAD_BA = 82;
+    BID_ALL_SESSION_TDY_RT = 83;
+    ASK_ALL_SESSION_TDY_RT = 84;
+    PRICE_CHANGE_ON_DAY_RT = 85;
+    PREVIOUS_CLOSE_BID_PRICE_RT = 86;
+    PREVIOUS_CLOSE_ASK_PRICE_RT = 87;
+    LAST_TRADE_CANCELED_IND_RT = 88;
+    UNADJUSTED_PREV_LAST_PRICE_RT = 89;
+    ADJUSTED_PREV_LAST_PRICE_RT = 90;
+    BLOOMBERG_CLOSE_METHOD_RT = 91;
+    LAST_TICK_DIRECTION_RT = 92;
+    BASE_PRICE_ENABLED_RT = 93;
+    PERCENT_CHANGE_ON_DAY_TODAY_RT = 94;
+    NET_CHANGE_ON_DAY_TODAY_RT = 95;
+    PRICE_52_WEEK_HIGH_RT = 96;
+    PRICE_52_WEEK_HIGH_DATE_RT = 97;
+    PRICE_52_WEEK_LOW_RT = 98;
+    PRICE_52_WEEK_LOW_DATE_RT = 99;
+    PRICE_LAST_ASK_RT = 100;
+    PRICE_LAST_BID_RT = 101;
+    PRICE_HIGH_RT = 102;
+    PRICE_LOW_RT = 103;
+    PRICE_OPEN_RT = 104;
+    PRICE_LAST_RT = 105;
+    PRICE_PREVIOUS_CLOSE_RT = 106;
+    EVT_DELTA_TIMES_RT = 107;
+    PRICE_PCT_CHG_LAST_24_HOURS_RT = 108;
+    ALT_BOOK_NAME_RT = 109;
+    IMBALANCE_INDIC_RT = 110;
+    PRICE_24_HOURS_RT = 111;
+    ORDER_IMB_SELL_VOLUME = 112;
+    ALT_BOOK_BEST_ASK_NUM_OF_ORDR_RT = 113;
+    INDICATIVE_NEAR = 114;
+    ALT_BOOK_BEST_BID_NUM_OF_ORDR_RT = 115;
+    RT_EVAL_JAPANESE_CHG_ON_DAY = 116;
+    UNDL_PX_AT_OPT_TRADE_RT = 117;
+    ALT_JAPANESE_EVALUATION_PX_RT = 118;
+    IMBALANCE_BUY = 119;
+    SETTLMNT_PX_ALT_NOTTN_METHOD_RT = 120;
+    PX_ASK_LME_OFFICIAL_RT = 121;
+    IMBALANCE_SELL = 122;
+    ORDER_IMB_BUY_VOLUME = 123;
+    ALT_BOOK_BEST_ASK_CC_RT = 124;
+    REGIONAL_CLOSE_PX_DATE_RT = 125;
+    MIN_CROSS_ORDER_QUANTITY_RT = 126;
+    MIN_NEGOTIATED_TRADE_SIZE_RT = 127;
+    SETTLMNT_PX_ALTRNTVE_NOTTN_RT = 128;
+    EBS_TOUCH_LOW_REALTIME = 129;
+    ALT_BOOK_BEST_BID_CC_RT = 130;
+    REGIONAL_CLOSE_PX_RT = 131;
+    EBS_TOUCH_HIGH_REALTIME = 132;
+    PRICE_NET_CHG_LAST_24_HOURS_RT = 133;
+    PREV_SES_LAST_PRICE = 134;
+    RT_PX_CHG_NET_1D = 135;
+    RT_PX_CHG_PCT_1D = 136;
+    LAST_UPDATE_CHG_1D_RT = 137;
+    TIME = 138;
+    LAST_UPDATE_BID_RT = 139;
+    LAST_UPDATE_ASK_RT = 140;
+    BID_ASK_TIME = 141;
+    SES_START = 142;
+    SES_END = 143;
+    PRICE_LAST_TIME_RT = 144;
+    LAST_UPDATE_ALL_SESSIONS_RT = 145;
+    LAST_BID_TIME_TODAY_REALTIME = 146;
+    LAST_ASK_TIME_TODAY_REALTIME = 147;
+    LAST_PRICE_TIME_TODAY_REALTIME = 148;
+}
+
+enum statusType {
+    AuthorizationFailure = 0;
+    AuthorizationRevoked = 1;
+    AuthorizationSuccess = 2;
+    DataLoss = 3;
+    PermissionRequest = 4;
+    PermissionResponse = 5;
+    RequestFailure = 6;
+    RequestTemplateAvailable = 7;
+    RequestTemplatePending = 8;
+    RequestTemplateTerminated = 9;
+    ResolutionFailure = 10;
+    ResolutionSuccess = 11;
+    ServiceAvailabilityInfo = 12;
+    ServiceDeregistered = 13;
+    ServiceDown = 14;
+    ServiceOpened = 15;
+    ServiceOpenFailure = 16;
+    ServiceRegistered = 17;
+    ServiceRegisterFailure = 18;
+    ServiceUp = 19;
+    SessionClusterInfo = 20;
+    SessionClusterUpdate = 21;
+    SessionConnectionDown = 22;
+    SessionConnectionUp = 23;
+    SessionStarted = 24;
+    SessionStartupFailure = 25;
+    SessionTerminated = 26;
+    SlowConsumerWarning = 27;
+    SlowConsumerWarningCleared = 28;
+    SubscriptionFailure = 29;
+    SubscriptionStarted = 30;
+    SubscriptionStreamsActivated = 31;
+    SubscriptionStreamsDeactivated = 32;
+    SubscriptionTerminated = 33;
+    TokenGenerationFailure = 34;
+    TokenGenerationSuccess = 35;
+    TopicActivated = 36;
+    TopicCreated = 37;
+    TopicCreateFailure = 38;
+    TopicDeactivated = 39;
+    TopicDeleted = 40;
+    TopicRecap = 41;
+    TopicResubscribed = 42;
+    TopicSubscribed = 43;
+    TopicUnsubscribed = 44;
+}
