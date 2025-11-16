@@ -59,9 +59,8 @@ install [uv](https://docs.astral.sh/uv/getting-started/installation/)
 ## Usage
 #### Server (Windows)
 Make sure your Bloomberg Terminal is running, and logged in.  
-`cd gBLP/gBLP`
-`uv run server_gblp --grpchost <server_ip_or_hostname>`  
-where `<server_ip_or_hostname>` is what you specified when generating the certificates on a machine with a Bloomberg Terminal.
+`cd gBLP/gBLP`  
+`uv run server_gblp --grpchost <server_ip_or_hostname>` where `<server_ip_or_hostname>` is what you specified when generating the certificates on a machine with a Bloomberg Terminal.
 
 #### Python client
 Make sure the server is up and running, that you have a reachable IP or hostname, and that you have done the `--gencerts` on the server.  
