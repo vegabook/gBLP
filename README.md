@@ -72,12 +72,12 @@ An example python client is provided in `client_gBLP.py` but this is not package
 cd gBLP\gBLP
 uv run client_gBLP.py --grpchost <server_ip_or_hostname>
 ```
-Alternatively you can import the `Bbg` class, after ensuring file `client_gblp` is in scope. 
-`from client_gblp import Bbg`
-`bbg = Bbg("<server_ip_or_hostname>")`
-`bbg.historicalDataRequest(["USDZAR Curncy", "SPX Index"], ["LAST_PRICE"])`
+Alternatively you can import the `Bbg` class, after ensuring file `client_gblp` is in scope.   
+`from client_gblp import Bbg`  
+`bbg = Bbg("<server_ip_or_hostname>")`  
+`bbg.historicalDataRequest(["USDZAR Curncy", "SPX Index"], ["LAST_PRICE"])`  
 `bbg.intradayBarRequest("GBPUSD Curncy", start = dt.datetime.now() - dt.timedelta(days = 90), end = dt.datetime.now, interval = 1)`. Also takes an options parameter see the bloomberg api [docs](https://data.bloomberglp.com/professional/sites/10/2017/03/BLPAPI-Core-Developer-Guide.pdf)  
-`bbg.referenceDataRequest(["SPX Index", "CAC Index"], ["CUR_MKT_CAP", "INDX_MEMBERS"])`
+`bbg.referenceDataRequest(["SPX Index", "CAC Index"], ["CUR_MKT_CAP", "INDX_MEMBERS"])`  
 subscribe using `bbg.sub(["EURUSD Curncy", "XBTUSD Curncy"])` which will run a background subscription process. You can query the data decque through `bbg.subsdata`.  
 
 Note that the client is threaded and will continue to allow you to use python/IPython while it runs. 
