@@ -43,43 +43,42 @@ A gRPC server that wraps the Bloomberg V3 API.
 * FieldSearchRequest
 * FieldInfoRequest
 
-## Installation of Python server on Windows (and only on Windows)
-clone repo.   
-`cd gBLP`  
-`python -m pip install poetry` of if you're on nix, `nix develop`  
-`.\win_poetry_build.bat`
-`poetry install`
+## Installation of Python server on Windows
+install [uv](https://docs.astral.sh/uv/getting-started/installation/)  
+`git clone https://github.com/vegabook/gBLP`
+`cd gBLP\gBLP`  
 Generate security certificates with the following command.   
-`server_gblp --gencerts --grpchost <server_ip_or_hostname>`  
+`uv run server_gblp --gencerts --grpchost <server_ip_or_hostname>`  
 Here `localhost` is fine if you're staying on Windows on the same VM or machine, but otherwise you should use an IP address that is reachable from your client.  
 Later you can `server_gblp --delcerts` to remove the certificates, or `--gencerts` to regenerate them.  
 Done. You can now run the server and client.  
 
 ## Installation of Python client on Win/MacOs/Linux
 clone repo.   
-`cd gBLP`  
+install [uv](https://docs.astral.sh/uv/getting-started/installation/)  
+`git clone https://github.com/vegabook/gBLP`
+`cd gBLP/gBLP`  
 `python -m pip install poetry` of if you're on nix, `nix develop`  
 `poetry build`
 
 ## Usage
 #### Server (Windows)
 Make sure your Bloomberg Terminal is running, and logged in.  
-Change directory into the gBLP project directory.  
-In a Windows cmd or powershell terminal run  
-`.\gBLP\server_gblp --grpchost <server_ip_or_hostname>`  
+`cd gBLP/gBLP`
+`uv run server_gblp --grpchost <server_ip_or_hostname>`  
 where `<server_ip_or_hostname>` is what you specified when generating the certificates on a machine with a Bloomberg Terminal.
 
-#### Client
-From a python REPL or script, on Windows, on WSL, or in a Linux VM, run the following code. This will not work if `<server_ip_or_hostname>` is not reachable from your client. Use `ping <server_ip_or_hostname>` from the client to check.
+#### Python client
+An example python client is provided in `client_gBLP.py` but this is not packaged, so you will have to modify it yourself if you want to use it in your apps, although this client does drop you into iPython so it should be easy to convert to notebooks etc.   
 ```
-from gBLP.client_glp import Bbg
-bbg = Bbg(grpc_host="<server_ip_or_hostname>")
-test_hist = bbg.historicalDataRequest(["AAPL US Equity", "USDZAR Curncy"], ["PX_BID", "PX_ASK"])
+cd gBLP\gBLP
+uv run client_gBLP.py --grpchost <server_ip_or_hostname>
 ```
 Note that the client is threaded and will continue to allow you to use python/IPython while it runs. 
 When you're done, `bbg.close()` will close the connection and clean up server side. Once closed, you cannot use the client again without reinstating it. 
 
-#### Client Methods
+#### Python Client Methods
+All in class `Bbg`:  
 * `historicalDataRequest`
 * `intradayBarRequest`
 * `referenceDataRequest`
