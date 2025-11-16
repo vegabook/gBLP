@@ -53,7 +53,7 @@ Here `localhost` is fine if you're staying on Windows on the same VM or machine,
 Later you can `server_gblp --delcerts` to remove the certificates, or `--gencerts` to regenerate them.  
 
 ## Installation of Python client on Win/MacOs/Linux
-`git clone https://github.com/vegabook/gBLP`
+`git clone https://github.com/vegabook/gBLP`  
 install [uv](https://docs.astral.sh/uv/getting-started/installation/)  
 
 ## Usage
