@@ -92,12 +92,12 @@ from google.protobuf import empty_pb2
 from argparse import ArgumentParser, RawTextHelpFormatter
 
 
-from util.SubscriptionOptions import (
+from SubscriptionOptions import (
     addSubscriptionOptions, 
     setSubscriptionSessionOptions
 )
 
-from util.ConnectionAndAuthOptions import (
+from ConnectionAndAuthOptions import (
     addConnectionAndAuthOptions, 
     createSessionOptions
 )   
