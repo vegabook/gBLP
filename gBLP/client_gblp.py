@@ -8,8 +8,8 @@
 import asyncio
 import threading
 import grpc
-import gBLP.bloomberg_pb2 as bloomberg_pb2
-import gBLP.bloomberg_pb2_grpc as bloomberg_pb2_grpc
+import bloomberg_pb2 as bloomberg_pb2
+import bloomberg_pb2_grpc as bloomberg_pb2_grpc
 import random
 from pathlib import Path
 import datetime as dt
@@ -28,7 +28,7 @@ from google.protobuf import empty_pb2
 import json
 import numpy as np
 
-from gBLP.constants import (
+from constants import (
     MAX_MESSAGE_LENGTH, 
     PONG_SECONDS_TIMEOUT,
     DEFAULT_FIELDS,
