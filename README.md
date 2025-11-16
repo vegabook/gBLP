@@ -64,12 +64,15 @@ Make sure your Bloomberg Terminal is running, and logged in.
 where `<server_ip_or_hostname>` is what you specified when generating the certificates on a machine with a Bloomberg Terminal.
 
 #### Python client
-An example python client is provided in `client_gBLP.py` but this is not packaged, so you will have to modify it yourself if you want to use it in your apps, although this client does drop you into iPython so it should be easy to convert to notebooks etc.   
+Make sure the server is up and running, that you a reachable IP or hostname, and that you have done the `--gencerts` on the server.  
+An example python client is provided in `client_gBLP.py` but this is not packaged, so you will have to modify it yourself if you want to use it in your apps, although this client does drop you into iPython so it should be easy to convert to notebooks etc.  Or you can use the class workflow. 
 ```
 cd gBLP\gBLP
 uv run client_gBLP.py --grpchost <server_ip_or_hostname>
 ```
 This will download some historical data for you and start a few subscriptions which you can query using `blp.subsdata` decque.  
+
+This project uses ssl-protected gRPC. The first time you run the client, it will not find certificates. Instead it will prompt you input a word (any word). The server will repeat that word to you and you have 10 seconds to type `Yes` (case sensitive) so that it will send certs to your client, which will save them. If you don't recgonise the word, or don't want to authorise the client, wait the 10 seconds or type anything other than `Yes`. Once you are certified then you are free to start using the client. 
   
 Alternatively you can import the `Bbg` class, after ensuring file `client_gblp` is in scope.   
 `from client_gblp import Bbg`  
