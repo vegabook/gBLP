@@ -41,15 +41,14 @@ This functionality is deemed of secondary importance and is not yet implemented.
 * FieldSearchRequest
 * FieldInfoRequest
 
-## Installation of Python server on Windows
+## Installation of Python server (Windows)
 install [uv](https://docs.astral.sh/uv/getting-started/installation/)  
-`git clone https://github.com/vegabook/gBLP`
+`git clone https://github.com/vegabook/gBLP`  
 `cd gBLP\gBLP`  
 Generate security certificates with the following command.   
 `uv run server_gblp --gencerts --grpchost <server_ip_or_hostname>`  
-Here `localhost` is fine if you're staying on Windows on the same VM or machine, but otherwise you should use an IP address that is reachable from your client.  
+Here `localhost` is fine if you're staying on Windows on the same VM or machine, but otherwise you should use an IP address that is reachable from your client.  Please note that going "off machine" requires a BPIPE licence.  
 Later you can `server_gblp --delcerts` to remove the certificates, or `--gencerts` to regenerate them.  
-Done. You can now run the server and client.  
 
 ## Installation of Python client on Win/MacOs/Linux
 `git clone https://github.com/vegabook/gBLP`
