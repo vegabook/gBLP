@@ -15,7 +15,7 @@ A gRPC server that wraps the Bloomberg V3 API.
 
 
 ## Why?
-* Streaming: a fully featured subscription API that operates in a separate thread in python, and uses idiomatic gRPC streams in other programming langauges. 
+* Streaming: a fully featured subscription API that operates in a separate thread in python, and uses idiomatic gRPC streams in other programming languages. 
 * Most used historical data functions are implemented. 
 * Multi-language: gRPC allows you to use the same API in any language that supports it. 
 * Blpapi on Linux, MacOS, or Windows (see the licence).
