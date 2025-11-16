@@ -20,15 +20,12 @@ A gRPC server that wraps the Bloomberg V3 API.
 * Blpapi on Linux, MacOS, or Windows (see the licence).
 * Robust gRPC based API mapping with almost total coverage of the Bloomberg API. 
 
-
-## Status
-* Beta, but 90% of what 90% of users need is working.
-* Python only client for now, but feel free to look at the [proto files](protos/bloomberg.proto).
-* Elixir, Swift, and Typescript are next, in that order. Priority to REPL-friendly languages. 
-
+## Clients
+* Python: an example python workflow is showing using `client_gblp.py` (see below)  
+* Elixir: see https://github.com/vegabook/blxx  
+* Proto files are provided which will make stubs for any other programming language. See directory  protos    
 
 ## What's working
-
 * Subscription subsystem. Unlike most api libraries, this one supports live data. 
 * HistoricalDataRequest. Daily or longer periodicity data. 
 * IntradayBarRequest. Minute or greater bars.
