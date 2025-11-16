@@ -5,7 +5,7 @@
 # you may not use this file except in compliance with the License.
 # ---------------------------------------------------------------------------
 
-from gBLP.util.utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
+from utils import makeName, printLicence, checkThreads, exitNotNT, printBeta
 exitNotNT() # make sure we're on Windows otherwise exit. 
 
 from rich.console import Console; console = Console()
@@ -43,7 +43,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 import grpc; grpc.aio.init_grpc_aio() # logging
 from grpc.aio import ServerInterceptor
 
-from gBLP.bloomberg_pb2 import (
+from bloomberg_pb2 import (
     KeyRequestId, 
     KeyResponse,
     HistoricalDataRequest,
@@ -62,7 +62,7 @@ from gBLP.bloomberg_pb2 import (
     ServicesInfoResponse,
     ServiceInfo)
 
-from gBLP.bloomberg_pb2_grpc import (
+from bloomberg_pb2_grpc import (
     BbgServicer, 
     KeyManagerServicer, 
     add_BbgServicer_to_server, 
@@ -70,14 +70,14 @@ from gBLP.bloomberg_pb2_grpc import (
     BbgStub
 )
 
-from gBLP.responseParsers import (
+from responseParsers import (
     buildHistoricalDataResponse, 
     buildIntradayBarResponse,
     buildReferenceDataResponse,
     makeTopicString
 )
 
-from gBLP.requestHelpers import (
+from requestHelpers import (
     bool_evaluator,
     add_dates_to_request_if_missing,
     add_overrides_to_bbgrequest
@@ -92,27 +92,27 @@ from google.protobuf import empty_pb2
 from argparse import ArgumentParser, RawTextHelpFormatter
 
 
-from gBLP.util.SubscriptionOptions import (
+from util.SubscriptionOptions import (
     addSubscriptionOptions, 
     setSubscriptionSessionOptions
 )
 
-from gBLP.util.ConnectionAndAuthOptions import (
+from util.ConnectionAndAuthOptions import (
     addConnectionAndAuthOptions, 
     createSessionOptions
 )   
 
-from gBLP.EventRouter import EventRouter
+from EventRouter import EventRouter
 
-from gBLP.util.certMaker import get_conf_dir, make_client_certs, make_all_certs, check_for_certs
-from gBLP.util.utils import makeName, printLicence, checkThreads
+from certMaker import get_conf_dir, make_client_certs, make_all_certs, check_for_certs
+from utils import makeName, printLicence, checkThreads
 
 
 # ----------------- global variables ----------------------
 
 globalOptions = None
 
-from gBLP.constants import DEFAULT_FIELDS
+from constants import DEFAULT_FIELDS
 
 # ----------------- thread creation tracking ----------------------
 def trace_function(frame, event, arg):

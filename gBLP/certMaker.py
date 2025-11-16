@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.x509 import load_pem_x509_certificate
-import datetime
+import datetime as dt
 from pathlib import Path
 
 import logging
@@ -59,8 +59,8 @@ def make_ca_authority_and_server(hostname,
         .issuer_name(issuer)
         .public_key(ca_private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=3650))  # 10 years validity
+        .not_valid_before(dt.datetime.utcnow())
+        .not_valid_after(dt.datetime.utcnow() + dt.timedelta(days=3650))  # 10 years validity
         .add_extension(
             x509.BasicConstraints(ca=True, path_length=None), critical=True,
         )
@@ -108,8 +108,8 @@ def make_ca_authority_and_server(hostname,
         .issuer_name(ca_certificate.subject)  # CA is the issuer
         .public_key(server_private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))  # 1 year validity
+        .not_valid_before(dt.datetime.utcnow())
+        .not_valid_after(dt.datetime.utcnow() + dt.timedelta(days=365))  # 1 year validity
         .add_extension(
             x509.BasicConstraints(ca=False, path_length=None), critical=True,
         )
@@ -185,8 +185,8 @@ def make_client_certs(hostname,
         .issuer_name(ca_certificate.subject)
         .public_key(client_private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))  # 1 year validity
+        .not_valid_before(dt.datetime.utcnow())
+        .not_valid_after(dadt.datetime.utcnow() + dt.timedelta(days=365))  # 1 year validity
         .sign(ca_private_key, hashes.SHA256())
     )
 

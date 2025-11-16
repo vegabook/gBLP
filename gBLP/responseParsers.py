@@ -5,7 +5,7 @@
 # you may not use this file except in compliance with the License.
 # ---------------------------------------------------------------------------
 
-import gBLP.bloomberg_pb2 as bbpb2
+import bloomberg_pb2 as bbpb2
 from rich.pretty import pprint
 
 from google.protobuf.timestamp_pb2 import Timestamp

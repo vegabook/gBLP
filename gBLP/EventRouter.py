@@ -5,13 +5,13 @@ import datetime as dt
 import time
 import sys
 from loguru import logger
-from gBLP.bloomberg_pb2 import Topic
-from gBLP.bloomberg_pb2 import FieldVal, FieldVals, Status
-from gBLP.bloomberg_pb2 import BarVals, barType
-from gBLP.bloomberg_pb2 import Status, statusType
+from bloomberg_pb2 import Topic
+from bloomberg_pb2 import FieldVal, FieldVals, Status
+from bloomberg_pb2 import BarVals, barType
+from bloomberg_pb2 import Status, statusType
 from google.protobuf.struct_pb2 import Value
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
-from gBLP.responseParsers import (makeBarMessage, makeStatusMessage, 
+from responseParsers import (makeBarMessage, makeStatusMessage, 
     makeTickMessage, makeTopicString)
 
 from rich.console import Console; console = Console() 

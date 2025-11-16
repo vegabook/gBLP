@@ -17,8 +17,8 @@ import time
 import os
 import sys
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
-from gBLP.util.certMaker import get_conf_dir
-from gBLP.util.utils import makeName, printBeta, printLicence
+from certMaker import get_conf_dir
+from utils import makeName, printBeta, printLicence
 import getpass
 from collections import deque, defaultdict
 import IPython
