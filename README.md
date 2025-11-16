@@ -15,10 +15,12 @@ A gRPC server that wraps the Bloomberg V3 API.
 
 
 ## Why?
+* Finally you're not limited to Windows and Python for developing using the Bloomberg API.  Even Terminal users can [WS]Linux (or VM) and use any programming language they want that supports Google's excellent [gRPC](https://grpc.io/) library.  
 * Streaming: a fully featured subscription API that operates in a separate thread in python, and uses idiomatic gRPC streams in other programming languages. 
 * Most used historical data functions are implemented. 
 * Multi-language: gRPC allows you to use the same API in any language that supports it. 
 * Blpapi on Linux, MacOS, or Windows (see the licence).
+* Robust threaded server implementation that isolates the (sometimes fragile and noisy neighbour) Bloomberg API runtime in its own process.  
 
 ## Clients
 * Python: an example python workflow is shown in `client_gblp.py` (see below)  
@@ -47,7 +49,7 @@ install [uv](https://docs.astral.sh/uv/getting-started/installation/)
 `cd gBLP\gBLP`  
 Generate security certificates with the following command.   
 `uv run server_gblp --gencerts --grpchost <server_ip_or_hostname>`  
-Here `localhost` is fine if you're staying on Windows on the same VM or machine, but otherwise you should use an IP address that is reachable from your client.  Please note that going "off machine" requires a BPIPE licence.  
+Here `localhost` is fine if you're staying on Windows on the same VM or machine, but otherwise you should use an IP address that is reachable from your client.  Please note that going "off machine" in a hardware sense requires a B-PIPE licence. 
 Later you can `server_gblp --delcerts` to remove the certificates, or `--gencerts` to regenerate them.  
 
 ## Installation of Python client on Win/MacOs/Linux
