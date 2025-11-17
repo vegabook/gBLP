@@ -24,7 +24,7 @@ A gRPC server that wraps the Bloomberg V3 API.
 
 ## Clients
 * Python: an example python workflow is shown in `client_gblp.py` (see below)  
-* Elixir: see https://github.com/vegabook/blxx  
+* Elixir: see https://github.com/vegabook/suprabonds/tree/main/lib/suprabonds/gblex  
 * Proto files are provided which you can use to make gRPC stubs for any other programming language. See directory `protos`.      
 
 ## What's working
