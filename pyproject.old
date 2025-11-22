@@ -1,8 +1,8 @@
 [project]
-name = "gBLP"
+name = "gblp"
 version = "0.1.0"
-description = "gBLP Bloomberg gRPC server"
-authors = ["Vegabook"]
+description = "Add your description here"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "blpapi>=3.25.10.1",
@@ -22,3 +22,6 @@ dependencies = [
     "rich>=14.2.0",
     "twine>=6.2.0",
 ]
+
+[[tool.uv.index]]
+url = "https://blpapi.bloomberg.com/repository/releases/python/simple/"
