@@ -71,8 +71,9 @@ class EventRouter(object):
         for msg in event:
             cid, topic, topicStr = makeStatusMessage(msg, self.parent.correlators)
             statusstr = statusType.Name(topic.status.statustype)
-            if statusstr ==statusType.Name(statusType.SessionTerminated):
+            if statusstr == statusType.Name(statusType.SessionTerminated):
                 logger.warning(f"{statusstr}")
+                self.parent.sessionTerminatedCallback()
             else:
                 logger.info(f"Received miscellaneous status: {statusstr}")
 

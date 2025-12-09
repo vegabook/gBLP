@@ -334,6 +334,11 @@ class SessionRunner(BbgServicer):
         request = self.session.getService(service).createRequest(serviceReq)
         return (True, request)
 
+    def sessionTerminatedCallback(self):
+        logger.error("!!!!!!!!!!!!!!!!!!!!!!!! SESSION TERMINATED !!!!!!!!!!!!!!!!!!!!!!!!")
+        logger.info("setting done")
+        self.done.set()
+
 
     def open(self):
         """ open the session and associated services """

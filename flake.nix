@@ -46,6 +46,7 @@
                 fi
                 uv run pip list
               else
+                export PS1="🧢 \e[38;5;211m\]g\e[38;5;111mBLP\[\e[0m [NESTED] $PS1"
                 echo "Nested nix-shell detected, skipping uv init"
               fi
             '';
