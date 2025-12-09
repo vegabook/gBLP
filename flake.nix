@@ -46,6 +46,7 @@
                 fi
                 uv run pip list
               else
+                alias ipy="uv run ipython --nosep"
                 export PS1="🧢 \e[38;5;211m\]g\e[38;5;111mBLP\[\e[0m [NESTED] $PS1"
                 echo "Nested nix-shell detected, skipping uv init"
               fi
