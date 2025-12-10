@@ -353,7 +353,6 @@ class SessionRunner(BbgServicer):
             time.sleep(60)
 
 
-        
     def open(self, fail_with_session = True):
         """ open the session and associated services """
         # setup the correct options
