@@ -336,14 +336,10 @@ class SessionRunner(BbgServicer):
 
 
     def sessionTerminatedCallback(self):
-        logger.error("!!!!!!!!!!!!!!!!!!!!!!!! SESSION TERMINATED !!!!!!!!!!!!!!!!!!!!!!!!")
+        logger.warning("! SESSION TERMINATED !")
         # try to recreate session constantly 
-        fail24 = dt.datetime.now() + dt.timedelta(minutes = 1) # minutes = 24 * 60
-        print(1)
-        self.session.stop()
-        print(2)
-        self.session.stop()
-        print(3)
+        self.session.stop() # just in case
+        fail24 = dt.datetime.now() + dt.timedelta(hours = 24)
         while True:
             if self.open(fail_with_session = False):
                 logger.info("Session re-opened")
