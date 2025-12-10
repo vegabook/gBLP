@@ -334,13 +334,27 @@ class SessionRunner(BbgServicer):
         request = self.session.getService(service).createRequest(serviceReq)
         return (True, request)
 
+
     def sessionTerminatedCallback(self):
         logger.error("!!!!!!!!!!!!!!!!!!!!!!!! SESSION TERMINATED !!!!!!!!!!!!!!!!!!!!!!!!")
-        logger.info("setting done")
-        self.done.set()
+        # try to recreate session constantly 
+        self.session.close()
+        fail24 = dt.datetime.now() + dt.timedelta(minutes = 1) # minutes = 24 * 60
+        while True:
+            if self.open(fail_with_session = False):
+                logger.info("Session re-opened")
+                # TODO subscribe
+                break
+            if dt.datetime.now() > fail24:
+                logger.error("Couldn't re-open session after 24 hours. Exiting")
+                self.close()
+                break
+            logger.info("Session re-open retry in 1 minute")
+            time.sleep(60)
 
 
-    def open(self):
+        
+    def open(self, fail_with_session = True):
         """ open the session and associated services """
         # setup the correct options
         sessionOptions = createSessionOptions(self.options)
@@ -357,9 +371,12 @@ class SessionRunner(BbgServicer):
                                           eventHandler=self.handler.processEvent)
         if not self.session.start():
             logger.error("Failed to start session.")
-            self.done.set()
+            if fail_with_session:
+                self.done.set()
+            return False
         else:
             logger.debug(f"Session opened")
+            return True
 
     def close(self):
         """ close the session """
@@ -687,6 +704,8 @@ class SessionRunner(BbgServicer):
                         checkThreads(processes=False, colour="green")
                     case ("key", b"i"): # DEBUG
                         await self.serviceInfo()
+                    case("key", b"s"): # DEBUG -- session disconnected test
+                        self.sessionTerminatedCallback()
                     case ("request", "close"):
                         self.done.set()
             except queue.Empty:
@@ -885,6 +904,9 @@ async def keypressDetector(comq, done):
                 comq.put(("key", b"c"))
             case b"i": # DEBUG
                 comq.put(("key", b"i"))
+            case b"s":
+                print("'s' pressed")
+                comq.put(("key", b"s"))
             case None:
                 pass
         await asyncio.sleep(0.2)
