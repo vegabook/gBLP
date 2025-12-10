@@ -339,7 +339,10 @@ class SessionRunner(BbgServicer):
         logger.error("!!!!!!!!!!!!!!!!!!!!!!!! SESSION TERMINATED !!!!!!!!!!!!!!!!!!!!!!!!")
         # try to recreate session constantly 
         fail24 = dt.datetime.now() + dt.timedelta(minutes = 1) # minutes = 24 * 60
-        print(dir(self.session))
+        try:
+            self.session.stop()
+        except:
+            logger.warning("Could not stop session")
         while True:
             if self.open(fail_with_session = False):
                 logger.info("Session re-opened")
