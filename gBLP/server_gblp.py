@@ -349,7 +349,7 @@ class SessionRunner(BbgServicer):
                 logger.error("Couldn't re-open session after 24 hours. Exiting")
                 self.close()
                 break
-            logger.info("Session re-open retry in 1 minute")
+            logger.info(f"Session re-open retry every minute until {fail24}")
             time.sleep(60)
 
 
