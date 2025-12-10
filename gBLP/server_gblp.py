@@ -338,8 +338,8 @@ class SessionRunner(BbgServicer):
     def sessionTerminatedCallback(self):
         logger.error("!!!!!!!!!!!!!!!!!!!!!!!! SESSION TERMINATED !!!!!!!!!!!!!!!!!!!!!!!!")
         # try to recreate session constantly 
-        self.session.close()
         fail24 = dt.datetime.now() + dt.timedelta(minutes = 1) # minutes = 24 * 60
+        breakpoint()
         while True:
             if self.open(fail_with_session = False):
                 logger.info("Session re-opened")
@@ -798,8 +798,6 @@ class Bbg(BbgServicer):
         ip = context.peer().split(":")[1]
         return f"{client}:{ip}"
 
-    async def closeSession(self):
-        await self.session.close()
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
                                     context: grpc.aio.ServicerContext) -> HistoricalDataResponse:
