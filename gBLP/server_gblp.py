@@ -529,27 +529,6 @@ class SessionRunner(BbgServicer):
         return sir
 
 
-    def open(self):
-        """ open the session and associated services """
-        # setup the correct options
-        sessionOptions = createSessionOptions(self.options)
-        sessionOptions.setMaxEventQueueSize(self.maxEventQueueSize)
-        self.handler = EventRouter(parent = self)
-        if self.numDispatcherThreads > 1:
-            self.eventDispatcher = blpapi.EventDispatcher(numDispatcherThreads=self.numDispatcherThreads) 
-            self.eventDispatcher.start()
-            self.session = blpapi.Session(sessionOptions, 
-                                          eventHandler=self.handler.processEvent,
-                                          eventDispatcher=self.eventDispatcher)
-        else:
-            self.session = blpapi.Session(sessionOptions, 
-                                          eventHandler=self.handler.processEvent)
-        if not self.session.start():
-            logger.error("Failed to start session.")
-            self.done.set()
-        else:
-            logger.debug(f"Session opened")
-
     def close(self):
         """ close the session """
         self.session.stop()
