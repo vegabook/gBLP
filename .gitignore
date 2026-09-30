@@ -1,0 +1,51 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Secrets / credentials (never commit these) ----
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# ---- Large / binary media (keep the repo lean) ----
+# NB: .gitignore matches by pattern, not size — see the pre-commit size
+# guard note in the project docs for actual size enforcement.
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+# images/finvids.gif is intentionally kept (README header); no *.gif rule.
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/

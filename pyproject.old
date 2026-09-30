@@ -1,0 +1,27 @@
+[project]
+name = "gblp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "blpapi>=3.25.10.1",
+    "certifi>=2025.11.12",
+    "cryptography>=46.0.3",
+    "grpcio>=1.76.0",
+    "grpcio-tools>=1.76.0",
+    "ipython>=9.7.0",
+    "loguru>=0.7.3",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "pip>=25.3",
+    "polars>=1.35.2",
+    "prompt-toolkit>=3.0.52",
+    "psutil>=7.1.3",
+    "pytest>=9.0.1",
+    "rich>=14.2.0",
+    "twine>=6.2.0",
+]
+
+[[tool.uv.index]]
+url = "https://blpapi.bloomberg.com/repository/releases/python/simple/"

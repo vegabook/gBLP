@@ -1,0 +1,16 @@
+grpcio
+grpcio-tools
+ipython
+certifi
+cryptography
+rich
+numpy
+pandas
+polars
+psutil
+pytest
+loguru
+requests
+ruff
+vulture
+
