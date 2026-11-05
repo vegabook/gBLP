@@ -112,7 +112,16 @@ from utils import makeName, printLicence, checkThreads
 
 globalOptions = None
 
-from constants import DEFAULT_FIELDS
+from constants import (
+    DEFAULT_FIELDS,
+    PONG_SECONDS_TIMEOUT,
+    HEARTBEAT_TOPIC,
+    HEARTBEAT_FIELDS,
+    HEARTBEAT_INTERVAL,
+    HEARTBEAT_STALE_AFTER,
+    HEARTBEAT_RESTART_EVERY,
+    HEARTBEAT_CID
+)
 
 # ----------------- thread creation tracking ----------------------
 def trace_function(frame, event, arg):
@@ -307,6 +316,13 @@ class SessionRunner(BbgServicer):
         self.loop = asyncio.get_event_loop() # used by the event handler
         # start the comq
         self.comqTask = asyncio.create_task(self.listenComq())
+        # heartbeat state, see heartbeatWatchdog
+        self.lastHeartbeat = None # monotonic time of last heartbeat tick, set by EventRouter
+        self.heartbeatStarted = None # monotonic time of first heartbeat subscription
+        self.heartbeatStale = False
+        self.lastRestart = None
+        self.reopening = False # True while sessionTerminatedCallback is reopening
+        self.watchdogTask = asyncio.create_task(self.heartbeatWatchdog())
 
 
     def _getService(self, serviceReq: str) -> bool:
@@ -336,21 +352,27 @@ class SessionRunner(BbgServicer):
 
 
     def sessionTerminatedCallback(self):
+        if self.done.is_set():
+            return # shutting down, don't reopen
         logger.warning("! SESSION TERMINATED !")
-        # try to recreate session constantly 
-        self.session.stop() # just in case
-        fail24 = dt.datetime.now() + dt.timedelta(hours = 24)
-        while True:
-            if self.open(fail_with_session = False):
-                logger.info("Session re-opened")
-                # TODO subscribe (or should clients handle this?)
-                break
-            if dt.datetime.now() > fail24:
-                logger.error("Couldn't re-open session after 24 hours. Exiting")
-                self.close()
-                break
-            logger.info(f"Session re-open retry every minute until {fail24}")
-            time.sleep(60)
+        self.reopening = True
+        try:
+            # try to recreate session constantly
+            self.session.stop() # just in case
+            fail24 = dt.datetime.now() + dt.timedelta(hours = 24)
+            while True:
+                if self.open(fail_with_session = False):
+                    logger.info("Session re-opened")
+                    # TODO subscribe (or should clients handle this?)
+                    break
+                if dt.datetime.now() > fail24:
+                    logger.error("Couldn't re-open session after 24 hours. Exiting")
+                    self.close()
+                    break
+                logger.info(f"Session re-open retry every minute until {fail24}")
+                time.sleep(60)
+        finally:
+            self.reopening = False
 
 
     def open(self, fail_with_session = True):
@@ -358,6 +380,7 @@ class SessionRunner(BbgServicer):
         # setup the correct options
         sessionOptions = createSessionOptions(self.options)
         sessionOptions.setMaxEventQueueSize(self.maxEventQueueSize)
+        self.servicesOpen = dict() # services belong to a session, so a new session must reopen them
         self.handler = EventRouter(parent = self)
         if self.numDispatcherThreads > 1:
             self.eventDispatcher = blpapi.EventDispatcher(numDispatcherThreads=self.numDispatcherThreads) 
@@ -375,17 +398,78 @@ class SessionRunner(BbgServicer):
             return False
         else:
             logger.debug(f"Session opened")
+            self._subscribeHeartbeat()
             return True
 
-    def close(self):
-        """ close the session """
-        self.session.stop()
-        if self.numDispatcherThreads > 1:
-            self.eventDispatcher.stop()
-        if not self.comqTask.done():
-            logger.info("Cancelling comq listener")
-            self.comqTask.cancel()
-        logger.info(f"Bloomberg session closed")
+
+    # ------------ heartbeat -------------------
+
+    def _subscribeHeartbeat(self):
+        """ subscribe to the heartbeat topic; EventRouter records its ticks """
+        try:
+            success, service = self._getService("Subscribe")
+            if not success:
+                logger.error(f"Heartbeat not subscribed: {service}")
+                return
+            fields = ",".join(HEARTBEAT_FIELDS)
+            substring = f"{service}/{HEARTBEAT_TOPIC}?fields={fields}&interval={HEARTBEAT_INTERVAL}"
+            sublist = blpapi.SubscriptionList()
+            sublist.add(substring, correlationId=blpapi.CorrelationId(HEARTBEAT_CID))
+            self.session.subscribe(sublist)
+            if self.heartbeatStarted is None:
+                self.heartbeatStarted = time.monotonic()
+            logger.info(f"Heartbeat subscribing: {substring}")
+        except Exception as e:
+            logger.error(f"Heartbeat subscription error: {e}")
+
+
+    def heartbeatAge(self):
+        """ seconds since the last heartbeat tick, or since first subscribing if none yet """
+        since = self.lastHeartbeat or self.heartbeatStarted
+        if since is None:
+            return None
+        return time.monotonic() - since
+
+
+    def heartbeatStatus(self) -> str:
+        """ one line heartbeat state, returned by ping """
+        age = self.heartbeatAge()
+        if age is None:
+            return "heartbeat not started"
+        state = "STALE" if age >= HEARTBEAT_STALE_AFTER else "ok"
+        if self.lastHeartbeat is None:
+            return f"heartbeat {state}, no tick in {age:.0f}s since subscribing"
+        return f"heartbeat {state}, last tick {age:.0f}s ago"
+
+
+    async def heartbeatWatchdog(self):
+        """ check the heartbeat is ticking. If stale, restart the session at most every
+        HEARTBEAT_RESTART_EVERY seconds. Stopping the session triggers
+        sessionTerminatedCallback, which reopens it and resubscribes the heartbeat. """
+        while not self.done.is_set():
+            await asyncio.sleep(HEARTBEAT_INTERVAL)
+            try:
+                age = self.heartbeatAge()
+                if age is None:
+                    continue
+                if age < HEARTBEAT_STALE_AFTER:
+                    if self.heartbeatStale:
+                        logger.success(f"Heartbeat recovered, last tick {age:.0f}s ago")
+                        self.heartbeatStale = False
+                    continue
+                if not self.heartbeatStale:
+                    logger.error(f"Heartbeat STALE: no {HEARTBEAT_TOPIC} tick for {age:.0f}s")
+                    self.heartbeatStale = True
+                if self.reopening:
+                    continue # sessionTerminatedCallback is already reopening
+                if self.lastRestart and time.monotonic() - self.lastRestart < HEARTBEAT_RESTART_EVERY:
+                    continue
+                self.lastRestart = time.monotonic()
+                logger.warning(f"Restarting Bloomberg session, heartbeat stale for {age:.0f}s")
+                await asyncio.to_thread(self.session.stop)
+            except Exception as e:
+                logger.error(f"Heartbeat watchdog error: {e}")
+        logger.info("Heartbeat watchdog stopped.")
 
 
     async def historicalDataRequest(self, request: HistoricalDataRequest, 
@@ -545,6 +629,11 @@ class SessionRunner(BbgServicer):
         return sir
 
 
+    async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
+        """ answer a ping with the heartbeat state """
+        return Pong(message=f"Pong: {request.message} | {self.heartbeatStatus()}")
+
+
     def close(self):
         """ close the session """
         self.session.stop()
@@ -553,6 +642,9 @@ class SessionRunner(BbgServicer):
         if not self.comqTask.done():
             logger.info("Cancelling comq listener")
             self.comqTask.cancel()
+        if not self.watchdogTask.done():
+            logger.info("Cancelling heartbeat watchdog")
+            self.watchdogTask.cancel()
         logger.info(f"Bloomberg session closed")
 
 
@@ -872,9 +964,13 @@ class Bbg(BbgServicer):
 
 
     async def ping(self, request: Ping, context: grpc.aio.ServicerContext) -> Pong:
-        message = f"Pong: {request.message}"
-        logger.info(f"Received ping {request.message}. Sending pong.")
-        return Pong(message=message)
+        # forwarded so the pong proves the session runner is alive and reports its heartbeat
+        logger.info(f"Received ping {request.message}. Forwarding to session runner.")
+        try:
+            return await self.stub.ping(request, timeout=PONG_SECONDS_TIMEOUT)
+        except grpc.aio.AioRpcError as e:
+            logger.error(f"Session runner did not answer ping: {e.code()}")
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "Bloomberg session runner not responding")
 
 
     async def close(self):

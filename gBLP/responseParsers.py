@@ -121,7 +121,9 @@ def makeTopicString(topic):
 
 
 def makeStatusMessage(msg, correlators):
-    cid = msg.correlationId().value()
+    # session-level messages (e.g. SessionTerminated) may carry no correlation id
+    correlationId = msg.correlationId()
+    cid = correlationId.value() if correlationId is not None else None
     timestampdt = dt.datetime.strptime(getTimeStamp(), '%Y-%m-%d %H:%M:%S')
     topic = bbpb2.Topic()
     # now erase from correlators if there was a subscription failure

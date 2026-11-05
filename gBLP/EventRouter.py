@@ -11,8 +11,9 @@ from bloomberg_pb2 import BarVals, barType
 from bloomberg_pb2 import Status, statusType
 from google.protobuf.struct_pb2 import Value
 from google.protobuf.timestamp_pb2 import Timestamp as protoTimestamp
-from responseParsers import (makeBarMessage, makeStatusMessage, 
+from responseParsers import (makeBarMessage, makeStatusMessage,
     makeTickMessage, makeTopicString)
+from constants import HEARTBEAT_CID, HEARTBEAT_TOPIC
 
 from rich.console import Console; console = Console() 
 
@@ -47,8 +48,33 @@ class EventRouter(object):
                 self.parent.correlators.pop(cid, None)
 
 
+    def isHeartbeat(self, msg):
+        """ is this message for the server's own heartbeat subscription """
+        cid = msg.correlationId()
+        return cid is not None and cid.value() == HEARTBEAT_CID
+
+
+    def processHeartbeatStatus(self, msg):
+        """ log heartbeat subscription status; never routed to clients """
+        try:
+            msgtype = str(msg.messageType())
+            if msgtype == "SubscriptionStarted":
+                logger.success(f"Heartbeat subscription started: {HEARTBEAT_TOPIC}")
+            elif msgtype == "SubscriptionFailure":
+                logger.error(f"Heartbeat subscription failed: {msg.toPy()}")
+            elif msgtype == "SubscriptionTerminated":
+                logger.warning(f"Heartbeat subscription terminated: {msg.toPy()}")
+            else:
+                logger.info(f"Heartbeat subscription status: {msgtype}")
+        except Exception as e:
+            logger.error(f"Failed to process heartbeat status: {e}")
+
+
     def processSubscriptionStatus(self, event):
         for msg in event:
+            if self.isHeartbeat(msg):
+                self.processHeartbeatStatus(msg)
+                continue
             cid, topic, topicStr = makeStatusMessage(msg, self.parent.correlators)
             match topic.status.statustype:
                 case statusType.SubscriptionFailure:
@@ -83,6 +109,10 @@ class EventRouter(object):
         process subsription data message and put on queue
         """
         for msg in event:
+            # heartbeat ---> must come first: makeTickMessage would KeyError on its cid
+            if self.isHeartbeat(msg):
+                self.parent.lastHeartbeat = time.monotonic()
+                continue
             # bars --->
             msgtype = msg.messageType()
             if msgtype in (blpapi.Name("MarketBarUpdate"),
