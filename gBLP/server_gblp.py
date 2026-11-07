@@ -333,12 +333,12 @@ class SessionRunner(BbgServicer):
             return (False, error)
         if not self.servicesOpen.get(serviceReq):
             if not self.session.openService(self.servicesAvail[serviceReq]):
-                error = "Failed to open service HistoricalDataRequest"
+                error = f"Failed to open service {serviceReq}"
                 logger.error(error)
                 return(False, error)
             else:
                 self.servicesOpen[serviceReq] = self.servicesAvail[serviceReq]
-                logger.info("Opened service HistoricalDataRequest")
+                logger.info(f"Opened service {serviceReq}")
         logger.info(f"Service {serviceReq} is open via {self.servicesOpen[serviceReq]}")
         return (True, self.servicesOpen[serviceReq])
 
@@ -481,7 +481,7 @@ class SessionRunner(BbgServicer):
         # make request dict
         success, bbgRequest = self._createEmptyRequest("HistoricalDataRequest")
         if not success:
-            raise context.abort(grpc.StatusCode.NOT_FOUND, "Service not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"Service not found: {bbgRequest}")
         dtstart = request.start.ToDatetime().strftime("%Y%m%d")
         dtend = request.end.ToDatetime().strftime("%Y%m%d")
         requestDict = {"securities": request.topics,
@@ -515,7 +515,7 @@ class SessionRunner(BbgServicer):
             result = buildHistoricalDataResponse(messageList)
             return result 
         else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
 
@@ -530,7 +530,7 @@ class SessionRunner(BbgServicer):
         logger.info(f"Requesting intraday bar data {str(request.topic)}")
         success, bbgRequest = self._createEmptyRequest("IntradayBarRequest")
         if not success:
-            raise context.abort(grpc.StatusCode.NOT_FOUND, "Service not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"Service not found: {bbgRequest}")
         dtstart = request.start.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
         dtend = request.end.ToDatetime().strftime("%Y-%m-%dT%H:%M:%S")
         if not request.interval:
@@ -566,7 +566,7 @@ class SessionRunner(BbgServicer):
             result = buildIntradayBarResponse(messageList)
             return result
         else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
     async def referenceDataRequest(self, request: ReferenceDataRequest,
@@ -579,7 +579,7 @@ class SessionRunner(BbgServicer):
                      f"Fields: {' '.join(list(request.fields))}"))
         success, bbgRequest = self._createEmptyRequest("ReferenceDataRequest")
         if not success:
-            raise context.abort(grpc.StatusCode.NOT_FOUND, "Service not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"Service not found: {bbgRequest}")
         requestDict = {"securities": request.topics,
                        "fields": request.fields}
 
@@ -606,7 +606,7 @@ class SessionRunner(BbgServicer):
             result = buildReferenceDataResponse(messageList)
             return result
         else:
-            context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
 
 
     async def servicesInfoRequest(self, _request,
