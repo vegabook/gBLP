@@ -352,6 +352,32 @@ class Bbg:
         return data
 
 
+    def bsrchRequest(self,
+                     domain,
+                     overrides = None) -> bloomberg_pb2.BsrchResponse:
+        """ run a search saved in SRCH <GO>, domain e.g. "FI:<saved search name>" """
+        if not type(domain) == str:
+            logger.error("Domain must be a string.")
+            return
+        if overrides:
+            if not type(overrides) == dict:
+                logger.error("Overrides must be a dict.")
+                return
+
+        return self._loop_run_async(self.async_bsrchRequest(domain, overrides))
+
+    async def async_bsrchRequest(self,
+                                 domain,
+                                 overrides = None) -> bloomberg_pb2.BsrchResponse:
+        bsrchreq = bloomberg_pb2.BsrchRequest(
+            domain=domain,
+            overrides={k: str(v) for k, v in (overrides or {}).items()} # e.g. LIMIT=20000
+        )
+        logger.info(f"Requesting bsrch: {bsrchreq}")
+        data = await self.stub.bsrchRequest(bsrchreq, metadata=[("client", self.name)])
+        return data
+
+
     def mtl(self, 
             topics, 
             fields=DEFAULT_FIELDS,

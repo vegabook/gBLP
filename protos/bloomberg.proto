@@ -25,6 +25,7 @@ service Bbg {
   rpc intradayBarRequest(IntradayBarRequest) returns (IntradayBarResponse) {}
   rpc referenceDataRequest(ReferenceDataRequest) returns (ReferenceDataResponse) {}
   rpc servicesInfoRequest(google.protobuf.Empty) returns (ServicesInfoResponse) {}
+  rpc bsrchRequest(BsrchRequest) returns (BsrchResponse) {}
   rpc ping(Ping) returns (Pong) {}
 }
 
@@ -233,6 +234,26 @@ message HistoricalDataResponse {
     // An array of items, each containing security data
     ErrorInfo responseError = 1;
     repeated SecurityData securityData = 2;
+}
+
+
+/////////////// BSRCH //////////////////
+
+// searches saved in SRCH <GO>, via ExcelGetGridRequest on //blp/exrsvc (undocumented by Bloomberg)
+
+message BsrchRequest {
+  string domain = 1; // e.g. "FI:<saved search name>"
+  map <string, string> overrides = 2; // e.g. LIMIT
+}
+
+message BsrchResponse {
+  repeated string columnTitles = 1;
+  repeated BsrchRow rows = 2;
+  bool reachMax = 3; // results hit a limit
+}
+
+message BsrchRow {
+  repeated Value values = 1;
 }
 
 

@@ -309,3 +309,25 @@ def buildIntradayBarResponse(data):
             barData.time.CopyFrom(timestamp)
             response.bars.append(barData)
     return response
+
+
+def buildBsrchResponse(data):
+    """
+    ExcelGetGridRequest on //blp/exrsvc. Returns (response, error) where error
+    is Bloomberg's Error string, e.g. for an unknown domain, or None.
+    """
+    response = bbpb2.BsrchResponse()
+    error = None
+    for item in data:
+        if not response.columnTitles:
+            response.columnTitles.extend(item.get("ColumnTitles") or [])
+        response.reachMax = response.reachMax or bool(item.get("ReachMax"))
+        if item.get("Error"):
+            error = item["Error"]
+        for record in item.get("DataRecords") or []:
+            row = response.rows.add()
+            for field in record.get("DataFields") or []:
+                # each DataField is a choice holding one typed value, e.g. StringValue
+                value = next(iter(field.values()), None) if isinstance(field, dict) else field
+                row.values.append(createValue(value))
+    return response, error

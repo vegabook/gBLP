@@ -60,7 +60,9 @@ from bloomberg_pb2 import (
     subscriptionType, 
     ServicesInfoRequest,
     ServicesInfoResponse,
-    ServiceInfo)
+    ServiceInfo,
+    BsrchRequest,
+    BsrchResponse)
 
 from bloomberg_pb2_grpc import (
     BbgServicer, 
@@ -74,6 +76,7 @@ from responseParsers import (
     buildHistoricalDataResponse, 
     buildIntradayBarResponse,
     buildReferenceDataResponse,
+    buildBsrchResponse,
     makeTopicString
 )
 
@@ -310,7 +313,8 @@ class SessionRunner(BbgServicer):
                               "FieldInfoRequest": "//blp/apiflds",
                               "CategorizedFieldSearchRequest": "//blp/apiflds",
                               "studyRequest": "//blp/tasvc",
-                              "SnapshotRequest": "//blp/mktlist"}
+                              "SnapshotRequest": "//blp/mktlist",
+                              "ExcelGetGridRequest": "//blp/exrsvc"} # BSRCH, saved SRCH <GO> searches
         self.subq = asyncio.Queue() # sends messages out back to grpc handler
         self.numDispatcherThreads = 1 # if > 1 then threaded dispatchers will be created
         self.loop = asyncio.get_event_loop() # used by the event handler
@@ -607,6 +611,45 @@ class SessionRunner(BbgServicer):
             return result
         else:
             await context.abort(grpc.StatusCode.NOT_FOUND, "Data not found")
+
+
+    async def bsrchRequest(self, request: BsrchRequest,
+                           context: grpc.aio.ServicerContext) -> BsrchResponse:
+        """ run a search saved in SRCH <GO> (BSRCH in Excel) """
+
+        # send request to bloomberg
+        logger.info(f"Bsrch request received. Domain: {request.domain}")
+        success, bbgRequest = self._createEmptyRequest("ExcelGetGridRequest")
+        if not success:
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"Service not found: {bbgRequest}")
+        # exrsvc overrides are name/value pairs, unlike refdata's fieldId/value
+        requestDict = {"Domain": request.domain}
+        if request.overrides:
+            requestDict["Overrides"] = [{"name": k, "value": v} for k, v in request.overrides.items()]
+        bbgRequest.fromPy(requestDict)
+
+        corrString = f"bsrch:{makeName(alphaLength = 32, digitLength = 0)}"
+        correlid = blpapi.CorrelationId(corrString)
+        q = asyncio.Queue()
+        self.correlators[corrString] = {"q": q,
+                                       "request": request}
+        self.session.sendRequest(bbgRequest, correlationId=correlid)
+
+        # wait for response
+        messageList = []
+        while True:
+            msg = await q.get()
+            messageList.append(msg["data"])
+            if not msg["partial"]:
+                break
+        result, error = buildBsrchResponse(messageList)
+        if error and not result.rows:
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"Bsrch error: {error}")
+        if error:
+            logger.warning(f"Bsrch {request.domain} returned rows and an error: {error}")
+        if result.reachMax:
+            logger.warning(f"Bsrch {request.domain} hit a limit at {len(result.rows)} rows")
+        return result
 
 
     async def servicesInfoRequest(self, _request,
@@ -918,6 +961,14 @@ class Bbg(BbgServicer):
         topicstr = ",".join(request.topics)
         logger.info(f"Received reference data request {topicstr} from {clientid}")
         result = await self.stub.referenceDataRequest(request)
+        return result
+
+
+    async def bsrchRequest(self, request: BsrchRequest,
+                           context: grpc.aio.ServicerContext) -> BsrchResponse:
+        clientid = self._makeClientId(context)
+        logger.info(f"Received bsrch request {request.domain} from {clientid}")
+        result = await self.stub.bsrchRequest(request)
         return result
 
 
