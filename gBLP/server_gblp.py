@@ -765,7 +765,7 @@ class SessionRunner(BbgServicer):
 
         tl = TopicList()
         for v in self.correlators.values():
-            if v["clientid"] == clientid:
+            if "topic" in v and v.get("clientid") == clientid: # requests share the dict, without either
                 tl.topics.append(v["topic"])
         return tl
 
