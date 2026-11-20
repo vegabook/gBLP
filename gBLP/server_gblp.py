@@ -329,7 +329,7 @@ class SessionRunner(BbgServicer):
         self.watchdogTask = asyncio.create_task(self.heartbeatWatchdog())
 
 
-    def _getService(self, serviceReq: str) -> bool:
+    def _getService(self, serviceReq: str) -> tuple:
         """ open a service from the sub and ref services available """
         if not self.session:
             error = "Session not open"

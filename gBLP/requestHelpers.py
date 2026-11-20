@@ -16,7 +16,6 @@ def bool_evaluator(protomap: dict) -> dict:
     if not protomap:
         return dict()
     newdict = dict()
-    print(type(protomap))
     for k, v in protomap.items():
         if type(v) != str:
             logger.warning(f"Value {v} is not a string.")

@@ -29,8 +29,8 @@ class EventRouter(object):
         if not correlator:
             logger.warning(f"Correlator {cid} not found")
             return
-        q = correlator["q"]
-        q.put_nowait(sendmsg)
+        # runs on blpapi's dispatcher thread, and asyncio queues aren't thread-safe
+        self.parent.loop.call_soon_threadsafe(correlator["q"].put_nowait, sendmsg)
 
 
     def getTimeStamp(self):
@@ -143,9 +143,9 @@ class EventRouter(object):
                     self.processResponseEvent(event, False)
                 case blpapi.Event.REQUEST_STATUS:
                     for msg in event:
-                        if msg.messageType == blpapi.Names.REQUEST_FAILURE:
-                            reason=msg.getElement("reason")
-                            print(f"Request failed: {reason}")
+                        if msg.messageType() == blpapi.Name("RequestFailure"):
+                            logger.error((f"Request {msg.correlationId().value()} failed: "
+                                          f"{msg.getElement('reason')}"))
                 case blpapi.Event.SUBSCRIPTION_DATA:
                     self.processSubscriptionDataEvent(event)
                 case blpapi.Event.SUBSCRIPTION_STATUS:
@@ -153,5 +153,5 @@ class EventRouter(object):
                 case _:
                     self.processMiscEvents(event)
         except blpapi.Exception as e:
-            logger.warn("Failed to process event {event}: {e}")
+            logger.warning(f"Failed to process event {event}: {e}")
         return False
