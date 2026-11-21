@@ -874,7 +874,7 @@ class SessionRunner(BbgServicer):
 
 class ConnectionLoggingInterceptor(ServerInterceptor):
     async def intercept_service(self, continuation, handler_call_details):
-        console.print(f"[cyan]Incoming connection: {handler_call_details.method}")
+        logger.info(f"Incoming connection: {handler_call_details.method}") # not console: it can pause
         # Proceed with the normal handling of the RPC
         return await continuation(handler_call_details)
 
