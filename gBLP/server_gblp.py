@@ -12,6 +12,18 @@ from rich.console import Console; console = Console()
 
 from loguru import logger
 
+# console writes on their own thread, through an unbounded queue: a console paused by a click
+# (QuickEdit) then holds up the log, not the server. loguru's enqueue=True would block once its
+# small pipe filled. Runs again in the session process, which re-imports this module.
+import sys, queue, threading
+from colorama import AnsiToWin32 # loguru's own dependency on Windows
+def logWriter(q, out = AnsiToWin32(sys.stderr).stream):
+    for message in iter(q.get, None):
+        out.write(message); out.flush()
+logq = queue.SimpleQueue()
+threading.Thread(target = logWriter, args = (logq,), name = "logWriter", daemon = True).start()
+logger.remove(); logger.add(logq.put, colorize = True)
+
 import grpc; grpc.aio.init_grpc_aio()
 
 from constants import MAX_MESSAGE_LENGTH
